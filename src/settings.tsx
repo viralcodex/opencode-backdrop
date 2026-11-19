@@ -177,8 +177,7 @@ export function WallpaperSettings(props: {
                 </button>
               </div>
               <Show when={expanded() || props.images().length > limit()}>
-                <div class="opencode-wallpaper-gallery-toggle" style={{ display: "flex", "align-items": "center", gap: "12px", width: "100%" }}>
-                  <span aria-hidden="true" style={{ flex: "1", "border-top": "1px solid var(--v2-border-border-base)" }} />
+                <div class="opencode-wallpaper-gallery-toggle" style={{ display: "flex", "justify-content": "center", width: "100%" }}>
                   <ctx.ui.Button
                     aria-expanded={expanded()}
                     aria-controls={galleryId}
@@ -186,7 +185,6 @@ export function WallpaperSettings(props: {
                   >
                     {ctx.t(expanded() ? "gallery.showLess" : "gallery.showMore")}
                   </ctx.ui.Button>
-                  <span aria-hidden="true" style={{ flex: "1", "border-top": "1px solid var(--v2-border-border-base)" }} />
                 </div>
               </Show>
             </div>
@@ -205,60 +203,64 @@ export function WallpaperSettings(props: {
               }}
             />
           </ctx.ui.SettingsRow>
-          <ctx.ui.SettingsRow
-            id="wallpaper-slideshow"
-            title={ctx.t("slideshow.title")}
-            description={ctx.t("slideshow.description")}
-          >
-            <ctx.ui.Switch
-              label={ctx.t("slideshow.title")}
-              hideLabel
-              checked={!!settings.value.slideshow}
-              disabled={!settings.value.slideshow && props.images().length < 2}
-              onChange={(value) => settings.update((draft) => { draft.slideshow = value })}
-            />
-          </ctx.ui.SettingsRow>
-          <ctx.ui.SettingsRow
-            id="wallpaper-transition"
-            title={ctx.t("transition.title")}
-            description={ctx.t("transition.description")}
-          >
-            <ctx.ui.Select<WallpaperTransition>
-              label={ctx.t("transition.title")}
-              value={settings.value.transition ?? slideshowControls.transition}
-              disabled={!settings.value.slideshow}
-              options={[
-                { value: "none", label: ctx.t("transition.none") },
-                { value: "fade", label: ctx.t("transition.fade") },
-              ]}
-              onChange={(value) => settings.update((draft) => { draft.transition = value })}
-            />
-          </ctx.ui.SettingsRow>
-          <ctx.ui.SettingsRow
-            id="wallpaper-duration"
-            title={ctx.t("duration.title")}
-            description={ctx.t("duration.description")}
-          >
-            <label class="opencode-wallpaper-duration">
-              <input
-                type="number"
-                min={slideshowControls.min}
-                max={slideshowControls.max}
-                step="1"
-                value={settings.value.duration ?? slideshowControls.duration}
-                disabled={!settings.value.slideshow}
-                aria-label={ctx.t("duration.title")}
-                onChange={(event) => {
-                  const input = event.currentTarget
-                  const value = input.valueAsNumber
-                  if (Number.isInteger(value) && value >= slideshowControls.min && value <= slideshowControls.max) {
-                    settings.update((draft) => { draft.duration = value })
-                  } else input.value = String(settings.value.duration ?? slideshowControls.duration)
-                }}
+          <div class="opencode-wallpaper-slideshow" role="group" aria-label={ctx.t("slideshow.title")} style={{ "border-bottom": "0.5px solid var(--v2-border-border-base)" }}>
+            <ctx.ui.SettingsRow
+              id="wallpaper-slideshow"
+              title={ctx.t("slideshow.title")}
+              description={ctx.t("slideshow.description")}
+            >
+              <ctx.ui.Switch
+                label={ctx.t("slideshow.title")}
+                hideLabel
+                checked={!!settings.value.slideshow}
+                disabled={!settings.value.slideshow && props.images().length < 2}
+                onChange={(value) => settings.update((draft) => { draft.slideshow = value })}
               />
-              <span>{ctx.t("duration.seconds")}</span>
-            </label>
-          </ctx.ui.SettingsRow>
+            </ctx.ui.SettingsRow>
+            <Show when={settings.value.slideshow}>
+              <div style={{ "margin-inline-start": "14px", "padding-inline-start": "16px", "padding-bottom": "16px", "--settings-list-row-padding": "12px" }}>
+                <ctx.ui.SettingsRow
+                  id="wallpaper-transition"
+                  title={ctx.t("transition.title")}
+                  description={ctx.t("transition.description")}
+                >
+                  <ctx.ui.Select<WallpaperTransition>
+                    label={ctx.t("transition.title")}
+                    value={settings.value.transition ?? slideshowControls.transition}
+                    options={[
+                      { value: "none", label: ctx.t("transition.none") },
+                      { value: "fade", label: ctx.t("transition.fade") },
+                    ]}
+                    onChange={(value) => settings.update((draft) => { draft.transition = value })}
+                  />
+                </ctx.ui.SettingsRow>
+                <ctx.ui.SettingsRow
+                  id="wallpaper-duration"
+                  title={ctx.t("duration.title")}
+                  description={ctx.t("duration.description")}
+                >
+                  <label class="opencode-wallpaper-duration">
+                    <input
+                      type="number"
+                      min={slideshowControls.min}
+                      max={slideshowControls.max}
+                      step="1"
+                      value={settings.value.duration ?? slideshowControls.duration}
+                      aria-label={ctx.t("duration.title")}
+                      onChange={(event) => {
+                        const input = event.currentTarget
+                        const value = input.valueAsNumber
+                        if (Number.isInteger(value) && value >= slideshowControls.min && value <= slideshowControls.max) {
+                          settings.update((draft) => { draft.duration = value })
+                        } else input.value = String(settings.value.duration ?? slideshowControls.duration)
+                      }}
+                    />
+                    <span>{ctx.t("duration.seconds")}</span>
+                  </label>
+                </ctx.ui.SettingsRow>
+              </div>
+            </Show>
+          </div>
           <For each={appearanceKeys}>
             {(key) => <ctx.ui.SettingsRow
               id={`wallpaper-${key}`}

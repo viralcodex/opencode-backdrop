@@ -214,6 +214,10 @@
   gap: 8px;
 }
 
+.opencode-wallpaper-slideshow [data-component="settings-row"] {
+  border-bottom: 0;
+}
+
 .opencode-wallpaper-duration input {
   width: 8ch;
   padding: 6px 8px;

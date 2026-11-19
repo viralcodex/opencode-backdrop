@@ -1,4 +1,4 @@
-import { Command, Plugin, SettingsPage, Store, Style } from "@opencode/plugin/gui"
+import { Command, Plugin, SettingsPage, Store } from "@opencode/plugin/gui"
 import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { Schema } from "effect"
 import { wallpaperCommand } from "./command"
@@ -136,9 +136,22 @@ export default Plugin.define({
         report(`missing:${preferences.preset}`, ctx.t("title"), [ctx.t("folders.missing")])
       }
     })
-    ctx.add(Style, css + wallpaperTransitionStyle)
-    ctx.add(Style, () => ctx.stores.preferences.value.enabled && image.url ? wallpaperCanvasStyle : "")
-    ctx.add(Style, () => wallpaperVariableStyle(ctx.stores.preferences.value, image.url))
+    const settingsStyle = document.createElement("style")
+    const canvasStyle = document.createElement("style")
+    const imageStyle = document.createElement("style")
+    settingsStyle.dataset.wallpaperStyle = "settings"
+    canvasStyle.dataset.wallpaperStyle = "canvas"
+    imageStyle.dataset.wallpaperStyle = "image"
+    settingsStyle.textContent = css
+    canvasStyle.textContent = wallpaperCanvasStyle + wallpaperTransitionStyle
+    canvasStyle.disabled = true
+    document.head.append(settingsStyle, canvasStyle, imageStyle)
+    onCleanup(() => { settingsStyle.remove(); canvasStyle.remove(); imageStyle.remove() })
+    createEffect(() => {
+      const variables = wallpaperVariableStyle(settings.value, image.url)
+      imageStyle.textContent = variables
+      canvasStyle.disabled = !variables
+    })
     createEffect(() => {
       if (!image.url || !image.width || !image.height) return
       onCleanup(alignWallpaperHeaders({ image: { width: image.width, height: image.height }, fit: ctx.stores.preferences.value.fit }))
