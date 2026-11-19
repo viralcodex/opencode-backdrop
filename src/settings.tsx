@@ -177,7 +177,8 @@ export function WallpaperSettings(props: {
                 </button>
               </div>
               <Show when={expanded() || props.images().length > limit()}>
-                <div class="opencode-wallpaper-gallery-toggle" style={{ display: "flex", "justify-content": "center", width: "100%" }}>
+                <div class="opencode-wallpaper-gallery-toggle" style={{ display: "flex", "align-items": "center", gap: "12px", width: "100%" }}>
+                  <span aria-hidden="true" style={{ flex: "1", "border-top": "1px solid var(--v2-border-border-base)" }} />
                   <ctx.ui.Button
                     aria-expanded={expanded()}
                     aria-controls={galleryId}
@@ -185,6 +186,7 @@ export function WallpaperSettings(props: {
                   >
                     {ctx.t(expanded() ? "gallery.showLess" : "gallery.showMore")}
                   </ctx.ui.Button>
+                  <span aria-hidden="true" style={{ flex: "1", "border-top": "1px solid var(--v2-border-border-base)" }} />
                 </div>
               </Show>
             </div>
