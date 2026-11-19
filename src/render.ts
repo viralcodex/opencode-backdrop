@@ -5,7 +5,6 @@ import { sameWallpaper, type WallpaperChoice } from "./model"
 import type { ThumbnailCache, ThumbnailLease } from "./thumbnail-cache"
 
 export type WallpaperReader = (image: WallpaperChoice, signal: AbortSignal) => Promise<string>
-export type WallpaperImage = ReturnType<typeof createWallpaperImage>
 
 function imageSource(selected: Accessor<WallpaperChoice | undefined>) {
   return createMemo(() => {

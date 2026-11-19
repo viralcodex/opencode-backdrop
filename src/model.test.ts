@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { Mutable, SelectOptions } from "@opencode/plugin/gui"
 import { Schema } from "effect"
 import { wallpaperCommand } from "./command"
-import { canRemoveWallpaper, checkWallpaperDuplicate, removeWallpaper, selectedWallpaper, wallpaperCatalog, wallpaperTitle, type WallpaperChoice } from "./model"
+import { canRemoveWallpaper, changeWallpaper, checkWallpaperDuplicate, removeWallpaper, selectedWallpaper, wallpaperCatalog, wallpaperTitle, type WallpaperChoice } from "./model"
 import { Preferences, initial } from "./preferences"
 
 const customImage = "data:image/png;base64,aGVsbG8="
@@ -223,7 +223,6 @@ function picker(choice: string | undefined, config: {
   const command = wallpaperCommand({
     t: (key) => key,
     signal: config.signal ?? new AbortController().signal,
-    stores: { preferences: { value, update: (change) => change(value) } },
     dialogs: {
       async select<T>(options: SelectOptions<T>) {
         requests.push(options)
@@ -232,6 +231,7 @@ function picker(choice: string | undefined, config: {
       },
     },
     layout: { settings: (page) => { pages.push(page) } },
-  }, config.images ?? (() => wallpaperCatalog([], value)), config.refresh ?? (async () => true))
+  }, config.images ?? (() => wallpaperCatalog([], value)), config.refresh ?? (async () => true),
+  () => value.enabled ? value.preset : "off", (selected) => changeWallpaper(value, selected))
   return { command, value, before, requests, pages }
 }

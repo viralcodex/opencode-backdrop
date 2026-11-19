@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { checkImage, wallpaperBlob } from "./image"
 import { Preferences, initial } from "./preferences"
-import { wallpaperStyle } from "./style"
+import { wallpaperVariableStyle } from "./style"
 
 describe("local wallpaper images", () => {
   test("accepts supported uploads at the size limit and rejects invalid types or sizes", () => {
@@ -43,7 +43,7 @@ describe("local wallpaper images", () => {
     const blob = wallpaperBlob(image)
     const url = URL.createObjectURL(blob)
     try {
-      const css = wallpaperStyle({ ...initial, enabled: true, preset: "file:large.png" }, url)
+      const css = wallpaperVariableStyle({ ...initial, enabled: true, preset: "file:large.png" }, url)
       expect(css).toContain(`url(${JSON.stringify(url)})`)
       expect(css.length).toBeLessThan(16 * 1024)
       expect(css).not.toContain(image)

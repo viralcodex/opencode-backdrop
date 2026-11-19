@@ -1,5 +1,5 @@
 import { afterEach, expect, jest, test } from "bun:test"
-import { createRoot, createSignal } from "solid-js"
+import { batch, createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { initial } from "./preferences"
 import { createWallpaperSlideshow } from "./slideshow"
@@ -61,8 +61,14 @@ test("pauses during loading or transitions and stops for static, disabled, or si
 test("restarts on manual selections and duration changes, recovers from removal, and clears timers on cleanup", () => {
   const f = fixture()
   jest.advanceTimersByTime(5000)
+  jest.advanceTimersByTime(4000)
+  batch(() => { f.reset(); f.update("preset", "b") })
+  jest.advanceTimersByTime(4999)
+  expect(f.selected()?.id).toBe("b")
+  jest.advanceTimersByTime(1)
+  expect(f.selected()?.id).toBe("c")
   f.reset()
-  expect(f.selected()?.id).toBe("a")
+  expect(f.selected()?.id).toBe("b")
   f.update("preset", "c")
   jest.advanceTimersByTime(4000)
   f.update("duration", 10)

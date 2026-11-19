@@ -40,6 +40,5 @@ export default {
   "transition.none": "None",
   "transition.fade": "Fade",
   "duration.title": "Display time",
-  "duration.description": "Seconds each wallpaper stays on screen, from 5 to 86400.",
-  "duration.seconds": "seconds",
+  "duration.description": "Seconds each wallpaper stays on screen (5 - 86400).",
 }

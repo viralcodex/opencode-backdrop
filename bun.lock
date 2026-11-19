@@ -15,7 +15,7 @@
         "vite-plugin-solid": "2.11.10",
       },
       "peerDependencies": {
-        "@opencode/plugin": "~2.2.6 || ^0.0.0-dev",
+        "@opencode/plugin": "~2.2.6 || ~2.3.2 || ^0.0.0-dev",
         "effect": "^4.1.0",
         "solid-js": "^1.9.17",
       },

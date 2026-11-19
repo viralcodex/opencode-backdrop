@@ -168,7 +168,7 @@ export default Plugin.define({
         return ctx.t("title")
       },
       get entries() {
-        return ["enabled", ...(ctx.desktop ? ["folders"] : []), "preset", "slideshow", "transition", "duration", ...appearanceKeys].map((id) => ({
+        return ["enabled", ...(ctx.desktop ? ["folders"] : []), "preset", "slideshow", ...(settings.value.slideshow ? ["transition", "duration"] : []), ...appearanceKeys].map((id) => ({
           id: `wallpaper-${id}`,
           title: ctx.t(`${id}.title`),
           keywords: "wallpaper background image upload fit folder tint brightness contrast slideshow transition fade duration seconds",
@@ -204,7 +204,7 @@ export default Plugin.define({
           if (!ctx.signal.aborted) report("refresh", ctx.t("folders.title"), [String(error)])
           return false
         }
-      }, selected, select),
+      }, () => settings.value.enabled ? selected()?.id ?? settings.value.preset : "off", select),
     )
   },
 })

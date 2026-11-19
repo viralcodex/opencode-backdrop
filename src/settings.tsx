@@ -21,8 +21,10 @@ export function WallpaperSettings(props: {
   const [folderRequest, setFolderRequest] = createSignal<AbortController>()
   const [expanded, setExpanded] = createSignal(false)
   const [columns, setColumns] = createSignal(1)
+  const [branchOffset, setBranchOffset] = createSignal(0)
   const galleryId = createUniqueId()
   let gallery!: HTMLDivElement
+  let slideshowDescription!: HTMLSpanElement
   let fileInput!: HTMLInputElement
   const selected = createMemo(() => selectedWallpaper(settings.value, props.images()))
   const appearance = createMemo(() => wallpaperAppearance(settings.value))
@@ -32,9 +34,20 @@ export function WallpaperSettings(props: {
     const measure = () => {
       const tracks = getComputedStyle(gallery).gridTemplateColumns
       setColumns(tracks === "none" ? 1 : tracks.trim().split(/\s+/).length)
+      const text = slideshowDescription.firstChild
+      if (text instanceof Text && text.length) {
+        const range = document.createRange()
+        range.setStart(text, 0)
+        range.setEnd(text, 1)
+        const letter = range.getBoundingClientRect()
+        const description = slideshowDescription.getBoundingClientRect()
+        const center = letter.left + letter.width / 2
+        setBranchOffset(getComputedStyle(slideshowDescription).direction === "rtl" ? description.right - center : center - description.left)
+      }
     }
     const observer = new ResizeObserver(measure)
     observer.observe(gallery)
+    observer.observe(slideshowDescription)
     measure()
     onCleanup(() => observer.disconnect())
   })
@@ -134,7 +147,7 @@ export function WallpaperSettings(props: {
               />
             </div>
           }>
-            <div class="opencode-wallpaper-gallery-section" style={{ display: "grid", gap: "12px", width: "100%", "min-width": "0" }}>
+            <div class="opencode-wallpaper-gallery-section">
               <div ref={gallery} id={galleryId} class="opencode-wallpaper-gallery">
                 <For each={visibleImages()}>
                   {(preset) => (
@@ -177,14 +190,18 @@ export function WallpaperSettings(props: {
                 </button>
               </div>
               <Show when={expanded() || props.images().length > limit()}>
-                <div class="opencode-wallpaper-gallery-toggle" style={{ display: "flex", "justify-content": "center", width: "100%" }}>
-                  <ctx.ui.Button
+                <div class="opencode-wallpaper-gallery-toggle">
+                  <button
+                    type="button"
+                    data-component="button-v2"
+                    data-variant="neutral"
+                    data-size="normal"
                     aria-expanded={expanded()}
                     aria-controls={galleryId}
                     onClick={() => setExpanded((value) => !value)}
                   >
                     {ctx.t(expanded() ? "gallery.showLess" : "gallery.showMore")}
-                  </ctx.ui.Button>
+                  </button>
                 </div>
               </Show>
             </div>
@@ -203,11 +220,15 @@ export function WallpaperSettings(props: {
               }}
             />
           </ctx.ui.SettingsRow>
-          <div class="opencode-wallpaper-slideshow" role="group" aria-label={ctx.t("slideshow.title")} style={{ "border-bottom": "0.5px solid var(--v2-border-border-base)" }}>
+          <div class="opencode-wallpaper-slideshow" role="group" aria-label={ctx.t("slideshow.title")} style={{ "--wallpaper-branch-center": `${branchOffset()}px` }}>
             <ctx.ui.SettingsRow
               id="wallpaper-slideshow"
               title={ctx.t("slideshow.title")}
-              description={ctx.t("slideshow.description")}
+              description={
+                <span ref={slideshowDescription} class="opencode-wallpaper-slideshow-description" data-expanded={settings.value.slideshow ? "" : undefined}>
+                  {ctx.t("slideshow.description")}
+                </span>
+              }
             >
               <ctx.ui.Switch
                 label={ctx.t("slideshow.title")}
@@ -218,7 +239,7 @@ export function WallpaperSettings(props: {
               />
             </ctx.ui.SettingsRow>
             <Show when={settings.value.slideshow}>
-              <div style={{ "margin-inline-start": "14px", "padding-inline-start": "16px", "padding-bottom": "16px", "--settings-list-row-padding": "12px" }}>
+              <div class="opencode-wallpaper-slideshow-options">
                 <ctx.ui.SettingsRow
                   id="wallpaper-transition"
                   title={ctx.t("transition.title")}
@@ -255,7 +276,6 @@ export function WallpaperSettings(props: {
                         } else input.value = String(settings.value.duration ?? slideshowControls.duration)
                       }}
                     />
-                    <span>{ctx.t("duration.seconds")}</span>
                   </label>
                 </ctx.ui.SettingsRow>
               </div>

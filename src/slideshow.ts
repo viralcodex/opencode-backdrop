@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, on, onCleanup, type Accessor } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, on, onCleanup, type Accessor } from "solid-js"
 import { selectedWallpaper, type WallpaperChoice } from "./model"
 import { slideshowControls, type WallpaperPreferences } from "./preferences"
 
@@ -11,7 +11,8 @@ export function nextWallpaper(current: string, images: readonly WallpaperChoice[
 // Automatic selections stay in the window, not in the shared preference store.
 export function createWallpaperSlideshow(settings: Accessor<WallpaperPreferences>, images: Accessor<readonly WallpaperChoice[]>, ready: Accessor<boolean>) {
   const [automatic, setAutomatic] = createSignal<string>()
-  const reset = () => { setAutomatic(undefined) }
+  const [revision, setRevision] = createSignal(0)
+  const reset = () => batch(() => { setAutomatic(undefined); setRevision((value) => value + 1) })
   createEffect(on(() => [settings().enabled, settings().preset, settings().slideshow], reset, { defer: true }))
   const selected = createMemo(() => {
     const preferences = settings()
@@ -21,6 +22,7 @@ export function createWallpaperSlideshow(settings: Accessor<WallpaperPreferences
     return selectedWallpaper(preferences, images())
   })
   createEffect(() => {
+    revision()
     const preferences = settings()
     const current = selected()
     if (!preferences.enabled || !preferences.slideshow || !current || images().length < 2 || !ready()) return

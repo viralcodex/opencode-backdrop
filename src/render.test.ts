@@ -1,7 +1,7 @@
 import { afterEach, expect, jest, spyOn, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import type { WallpaperChoice } from "./model"
-import { createWallpaperImage, type WallpaperImage } from "./render"
+import { createWallpaperImage } from "./render"
 
 const data = "data:image/png;base64,YWJj"
 const originalImage = Object.getOwnPropertyDescriptor(globalThis, "Image")
@@ -25,7 +25,7 @@ function fixture(duration = 0) {
   spyOn(URL, "createObjectURL").mockImplementation(() => { const url = `blob:test-${urls.length}`; urls.push(url); return url })
   spyOn(URL, "revokeObjectURL").mockImplementation((url) => { revoked.push(url) })
   let select!: (choice: WallpaperChoice | undefined) => void
-  let image!: WallpaperImage
+  let image!: ReturnType<typeof createWallpaperImage>
   createRoot((cleanup) => {
     dispose = cleanup
     const [selected, setSelected] = createSignal<WallpaperChoice>()
