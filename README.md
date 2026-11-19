@@ -31,6 +31,7 @@ Wallpaper starts off with an empty gallery. Images and preferences stay local, a
 - More tint improves text contrast. **Fill background** crops the image; **Show whole image** keeps it fully visible.
 - Use `/wallpaper` in chat to switch images or turn wallpaper off. Escape cancels the picker.
 - Turn **Show wallpaper** off to restore the app's backgrounds without losing your choices.
+- Turn **Wallpaper slideshow** on to cycle through all gallery images in order. Choose **None** or **Fade** in the transition dropdown and set **Display time** in seconds, from 5 to 86400. The default is 60 seconds. Slideshow needs at least two images, and fades respect reduced-motion settings.
 
 To remove an upload, hover or focus its tile and click **X**. Remove folder images by moving or deleting their source files.
 

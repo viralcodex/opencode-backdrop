@@ -3,15 +3,14 @@ import { usePlugin } from "@opencode/plugin/gui"
 import type definition from "./gui"
 import { canRemoveWallpaper, changeWallpaper, checkWallpaperDuplicate, removeWallpaper, selectedWallpaper, wallpaperTitle, type WallpaperChoice } from "./model"
 import { uploadImage } from "./image"
-import { appearanceControls, appearanceKeys, wallpaperAppearance } from "./preferences"
-import type { WallpaperImage } from "./render"
+import { appearanceControls, appearanceKeys, slideshowControls, wallpaperAppearance, type WallpaperTransition } from "./preferences"
 import type { ThumbnailCache } from "./thumbnail-cache"
-import { wallpaperBackground } from "./style"
 import { WallpaperThumbnail } from "./thumbnail"
 
 export function WallpaperSettings(props: {
   images: Accessor<readonly WallpaperChoice[]>
-  image: WallpaperImage
+  selected: Accessor<WallpaperChoice | undefined>
+  select: (choice: string) => void
   thumbnails: ThumbnailCache
   folder: Accessor<string>
   changeFolder: (folder: string, signal: AbortSignal) => Promise<boolean>
@@ -23,18 +22,13 @@ export function WallpaperSettings(props: {
   let fileInput!: HTMLInputElement
   const selected = createMemo(() => selectedWallpaper(settings.value, props.images()))
   const appearance = createMemo(() => wallpaperAppearance(settings.value))
-  const title = createMemo(() => {
-    if (!settings.value.enabled) return ctx.t("picker.off")
-    const choice = selected()
-    return choice ? wallpaperTitle(choice, ctx.t) : ctx.t("folders.missing")
-  })
   const cancelUpload = () => { request()?.abort(); setRequest(undefined) }
   onCleanup(() => { cancelUpload(); folderRequest()?.abort() })
   createRenderEffect(on(() => [settings.value.enabled, settings.value.preset, settings.value.image], cancelUpload, { defer: true }))
 
   function select(choice: string) {
     cancelUpload()
-    settings.update((draft) => { changeWallpaper(draft, choice) })
+    props.select(choice)
   }
 
   async function upload(file: File) {
@@ -81,13 +75,6 @@ export function WallpaperSettings(props: {
   return (
     <ctx.ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")}>
       <div class="opencode-wallpaper-settings">
-        <div
-          class="opencode-wallpaper-preview"
-          style={wallpaperBackground(settings.value, props.image.url)}
-          role="img"
-          aria-busy={props.image.loading}
-          aria-label={title()}
-        />
         <ctx.ui.SettingsSection>
           <ctx.ui.SettingsRow
             id="wallpaper-enabled"
@@ -138,7 +125,7 @@ export function WallpaperSettings(props: {
                     <button
                       type="button"
                       class="opencode-wallpaper-choice"
-                      aria-pressed={settings.value.preset === preset.id}
+                      aria-pressed={props.selected()?.id === preset.id}
                       onClick={() => select(preset.id)}
                     >
                       <WallpaperThumbnail choice={preset} cache={props.thumbnails} t={ctx.t} />
@@ -186,6 +173,60 @@ export function WallpaperSettings(props: {
                 if (file) void upload(file)
               }}
             />
+          </ctx.ui.SettingsRow>
+          <ctx.ui.SettingsRow
+            id="wallpaper-slideshow"
+            title={ctx.t("slideshow.title")}
+            description={ctx.t("slideshow.description")}
+          >
+            <ctx.ui.Switch
+              label={ctx.t("slideshow.title")}
+              hideLabel
+              checked={!!settings.value.slideshow}
+              disabled={!settings.value.slideshow && props.images().length < 2}
+              onChange={(value) => settings.update((draft) => { draft.slideshow = value })}
+            />
+          </ctx.ui.SettingsRow>
+          <ctx.ui.SettingsRow
+            id="wallpaper-transition"
+            title={ctx.t("transition.title")}
+            description={ctx.t("transition.description")}
+          >
+            <ctx.ui.Select<WallpaperTransition>
+              label={ctx.t("transition.title")}
+              value={settings.value.transition ?? slideshowControls.transition}
+              disabled={!settings.value.slideshow}
+              options={[
+                { value: "none", label: ctx.t("transition.none") },
+                { value: "fade", label: ctx.t("transition.fade") },
+              ]}
+              onChange={(value) => settings.update((draft) => { draft.transition = value })}
+            />
+          </ctx.ui.SettingsRow>
+          <ctx.ui.SettingsRow
+            id="wallpaper-duration"
+            title={ctx.t("duration.title")}
+            description={ctx.t("duration.description")}
+          >
+            <label class="opencode-wallpaper-duration">
+              <input
+                type="number"
+                min={slideshowControls.min}
+                max={slideshowControls.max}
+                step="1"
+                value={settings.value.duration ?? slideshowControls.duration}
+                disabled={!settings.value.slideshow}
+                aria-label={ctx.t("duration.title")}
+                onChange={(event) => {
+                  const input = event.currentTarget
+                  const value = input.valueAsNumber
+                  if (Number.isInteger(value) && value >= slideshowControls.min && value <= slideshowControls.max) {
+                    settings.update((draft) => { draft.duration = value })
+                  } else input.value = String(settings.value.duration ?? slideshowControls.duration)
+                }}
+              />
+              <span>{ctx.t("duration.seconds")}</span>
+            </label>
           </ctx.ui.SettingsRow>
           <For each={appearanceKeys}>
             {(key) => <ctx.ui.SettingsRow

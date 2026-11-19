@@ -12,6 +12,8 @@ export function wallpaperCommand(
   },
   images: () => readonly WallpaperChoice[],
   refresh: () => Promise<boolean>,
+  selected?: () => WallpaperChoice | undefined,
+  select?: (choice: string) => void,
 ): Command {
   return {
     id: "choose",
@@ -27,7 +29,7 @@ export function wallpaperCommand(
       const choice = await ctx.dialogs.select<typeof preferences.value.preset | "off" | "settings">({
         title: ctx.t("picker.title"),
         placeholder: ctx.t("picker.search"),
-        current: preferences.value.enabled ? preferences.value.preset : "off",
+        current: preferences.value.enabled ? selected?.()?.id ?? preferences.value.preset : "off",
         options: [
           ...images().map((preset) => ({
             title: wallpaperTitle(preset, ctx.t),
@@ -42,9 +44,8 @@ export function wallpaperCommand(
         ctx.layout.settings("wallpaper")
         return
       }
-      preferences.update((draft) => {
-        changeWallpaper(draft, choice)
-      })
+      if (select) select(choice)
+      else preferences.update((draft) => { changeWallpaper(draft, choice) })
     },
   }
 }

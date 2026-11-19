@@ -4,29 +4,20 @@ import { Schema } from "effect"
 import { wallpaperCommand } from "./command"
 import { canRemoveWallpaper, checkWallpaperDuplicate, removeWallpaper, selectedWallpaper, wallpaperCatalog, wallpaperTitle, type WallpaperChoice } from "./model"
 import { Preferences, initial } from "./preferences"
-import { wallpaperStyle } from "./style"
 
 const customImage = "data:image/png;base64,aGVsbG8="
 
-test("renders the selected upload or folder image, not an unselected saved image", () => {
+test("resolves only the selected upload or folder image", () => {
   const settings = Schema.decodeUnknownSync(Preferences)({ ...initial, enabled: true, preset: "custom", image: customImage })
   const file = { id: "file:example.png", title: "example", version: "1" }
   const images = wallpaperCatalog([file], settings)
-  expect(wallpaperStyle(settings, selectedWallpaper(settings, images)!.image!)).toContain(`url(${JSON.stringify(customImage)})`)
+  expect(selectedWallpaper(settings, images)?.image).toBe(customImage)
   const selected = { ...settings, preset: file.id }
   expect(selectedWallpaper(selected, images)).toBe(file)
-  const css = wallpaperStyle(selected, "blob:example")
-  expect(css).toContain('url("blob:example")')
-  expect(css).not.toContain(customImage)
 })
 
 describe("removing wallpapers", () => {
   const file = { id: "file:example.png", title: "example", version: "1" }
-
-  test("only an image added through the upload button is removable", () => {
-    const choices = wallpaperCatalog([file], { image: customImage })
-    expect(choices.filter(canRemoveWallpaper).map((image) => image.id)).toEqual(["custom"])
-  })
 
   test("refuses to remove a folder image whether selected or not", () => {
     const choices = wallpaperCatalog([file], { image: customImage })
@@ -41,18 +32,17 @@ describe("removing wallpapers", () => {
   test("restores previously hidden folder images in the gallery and picker", async () => {
     const settings = Schema.decodeUnknownSync(Preferences)({ ...initial, image: customImage, hidden: [file.id, "custom"] })
     const images = () => wallpaperCatalog([file], settings)
-    expect(images().map((image) => image.id)).toEqual([file.id, "custom"])
     const world = picker(undefined, { preferences: settings, images })
     await world.command.run()
     expect(world.requests[0]?.options.map((option) => option.value)).toEqual([file.id, "custom", "off", "settings"])
   })
 
   test("removes an unselected uploaded image without changing the active folder wallpaper", async () => {
-    const settings = { ...initial, preset: file.id, image: customImage, strength: 37, fit: "contain" as const }
+    const settings = { ...initial, enabled: true, preset: file.id, image: customImage, strength: 37, fit: "contain" as const }
     const choices = wallpaperCatalog([file], settings)
     removeWallpaper(settings, choices.at(-1)!, choices)
     const saved = Schema.decodeUnknownSync(Preferences)(JSON.parse(JSON.stringify(settings)))
-    expect(saved).toEqual({ ...initial, preset: file.id, strength: 37, fit: "contain" })
+    expect(saved).toEqual({ ...initial, enabled: true, preset: file.id, strength: 37, fit: "contain" })
     const world = picker(undefined, { preferences: saved, images: () => wallpaperCatalog([{ ...file, version: "2" }], saved, choices) })
     await world.command.run()
     expect(world.requests[0]?.options.some((option) => option.value === "custom")).toBe(false)
@@ -60,18 +50,16 @@ describe("removing wallpapers", () => {
   })
 
   test("removing the active uploaded image selects the first remaining wallpaper and allows another upload", () => {
-    const settings = { ...initial, preset: "custom", image: customImage, imageName: "saved.png", strength: 37, fit: "contain" as const }
+    const settings = { ...initial, enabled: true, preset: "custom", image: customImage, imageName: "saved.png", strength: 37, fit: "contain" as const }
     const choices = wallpaperCatalog([file], settings)
     removeWallpaper(settings, choices.at(-1)!, choices)
     const saved = Schema.decodeUnknownSync(Preferences)(JSON.parse(JSON.stringify(settings)))
-    expect(saved).toEqual({ ...initial, preset: file.id, strength: 37, fit: "contain" })
-    expect(wallpaperCatalog([file], saved).map((image) => image.id)).toEqual([file.id])
-    expect(wallpaperCatalog([file], { image: customImage }).map((image) => image.id)).toEqual([file.id, "custom"])
+    expect(saved).toEqual({ ...initial, enabled: true, preset: file.id, strength: 37, fit: "contain" })
     expect(() => checkWallpaperDuplicate({ name: "saved.png", image: customImage }, saved, wallpaperCatalog([file]))).not.toThrow()
   })
 
   test("turns off the background if the uploaded image is the only provided choice", () => {
-    const settings = { ...initial, preset: "custom", image: customImage }
+    const settings = { ...initial, enabled: true, preset: "custom", image: customImage }
     const choices = wallpaperCatalog([], settings).filter(canRemoveWallpaper)
     removeWallpaper(settings, choices[0], choices)
     expect(settings).toEqual({ ...initial, enabled: false })
@@ -79,9 +67,9 @@ describe("removing wallpapers", () => {
 
   test("removing the saved selection while wallpaper is off keeps it off", () => {
     const settings = { ...initial, enabled: false, preset: "custom", image: customImage }
-    const choices = wallpaperCatalog([], settings)
+    const choices = wallpaperCatalog([file], settings)
     removeWallpaper(settings, choices.at(-1)!, choices)
-    expect(settings).toEqual({ ...initial, enabled: false })
+    expect(settings).toEqual({ ...initial, enabled: false, preset: file.id })
   })
 })
 

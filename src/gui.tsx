@@ -1,17 +1,19 @@
 import { Command, Plugin, SettingsPage, Store, Style } from "@opencode/plugin/gui"
-import { createEffect, createMemo, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { Schema } from "effect"
 import { wallpaperCommand } from "./command"
 import { Catalog } from "./contract"
-import { selectedWallpaper, wallpaperCatalog, wallpaperTitle, type WallpaperChoice } from "./model"
-import { appearanceKeys, Preferences, initial } from "./preferences"
+import { changeWallpaper, wallpaperCatalog, wallpaperTitle, type WallpaperChoice } from "./model"
+import { appearanceKeys, Preferences, initial, slideshowControls, wallpaperFadeDuration } from "./preferences"
 import { createWallpaperImage, type WallpaperReader } from "./render"
 import { imageError, thumbnailBlob } from "./image"
 import { createWallpaperErrorReporter } from "./errors"
 import { createThumbnailCache } from "./thumbnail-cache"
 import { alignWallpaperHeaders } from "./backdrop"
-import { wallpaperCanvasStyle, wallpaperLayers, wallpaperVariableStyle } from "./style"
+import { wallpaperCanvasStyle, wallpaperVariableStyle } from "./style"
 import { WallpaperSettings } from "./settings"
+import { createWallpaperSlideshow } from "./slideshow"
+import { fadeWallpaper, wallpaperTransitionStyle } from "./transition"
 import en from "./i18n/en"
 import css from "./settings.css?inline"
 
@@ -86,14 +88,28 @@ export default Plugin.define({
       wallpaperCatalog(catalog?.state()?.images, ctx.stores.preferences.value, previous),
       [],
     )
-    const selected = createMemo(() =>
-      ctx.stores.preferences.value.enabled ? selectedWallpaper(ctx.stores.preferences.value, images()) : undefined,
+    const settings = ctx.stores.preferences
+    const slideshow = createWallpaperSlideshow(() => settings.value, images, () =>
+      !image.loading && !image.previous && (!!image.url || !!image.error),
     )
+    const selected = slideshow.selected
+    const select = (choice: string) => batch(() => {
+      slideshow.reset()
+      settings.update((draft) => { changeWallpaper(draft, choice) })
+    })
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)")
+    const [reducedMotion, setReducedMotion] = createSignal(motion.matches)
+    const motionChanged = () => setReducedMotion(motion.matches)
+    motion.addEventListener("change", motionChanged)
+    onCleanup(() => motion.removeEventListener("change", motionChanged))
     const read: WallpaperReader = async (choice, signal) => {
       if (!catalog) throw new Error("image.readError")
       return catalog.read({ id: choice.id, version: choice.version }, { signal: AbortSignal.any([signal, ctx.signal]) })
     }
-    const image = createWallpaperImage(selected, read)
+    const image = createWallpaperImage(selected, read, () =>
+      settings.value.slideshow && (settings.value.transition ?? slideshowControls.transition) === "fade" && !reducedMotion()
+        ? wallpaperFadeDuration : 0,
+    )
     const reportImage = (choice: WallpaperChoice, error: string) => report(
       `image:${choice.id}:${choice.version}`, ctx.t("title"),
       [`${wallpaperTitle(choice, ctx.t)}: ${imageError(error, ctx.t)}`],
@@ -120,12 +136,17 @@ export default Plugin.define({
         report(`missing:${preferences.preset}`, ctx.t("title"), [ctx.t("folders.missing")])
       }
     })
-    ctx.add(Style, css + wallpaperLayers(".opencode-wallpaper-preview"))
+    ctx.add(Style, css + wallpaperTransitionStyle)
     ctx.add(Style, () => ctx.stores.preferences.value.enabled && image.url ? wallpaperCanvasStyle : "")
     ctx.add(Style, () => wallpaperVariableStyle(ctx.stores.preferences.value, image.url))
     createEffect(() => {
       if (!image.url || !image.width || !image.height) return
       onCleanup(alignWallpaperHeaders({ image: { width: image.width, height: image.height }, fit: ctx.stores.preferences.value.fit }))
+    })
+    createEffect(() => {
+      const previous = image.previous
+      if (!previous || reducedMotion() || !settings.value.enabled || !settings.value.slideshow || settings.value.transition === "none") return
+      onCleanup(fadeWallpaper(previous, settings.value.fit, image.transition))
     })
     ctx.add(SettingsPage, {
       id: "wallpaper",
@@ -134,16 +155,17 @@ export default Plugin.define({
         return ctx.t("title")
       },
       get entries() {
-        return ["enabled", ...(ctx.desktop ? ["folders"] : []), "preset", ...appearanceKeys].map((id) => ({
+        return ["enabled", ...(ctx.desktop ? ["folders"] : []), "preset", "slideshow", "transition", "duration", ...appearanceKeys].map((id) => ({
           id: `wallpaper-${id}`,
           title: ctx.t(`${id}.title`),
-          keywords: "wallpaper background image upload fit folder tint brightness contrast",
+          keywords: "wallpaper background image upload fit folder tint brightness contrast slideshow transition fade duration seconds",
         }))
       },
       render: () => (
         <WallpaperSettings
           images={images}
-          image={image}
+          selected={selected}
+          select={select}
           thumbnails={thumbnails}
           folder={() => catalog?.state()?.folderLabel ?? catalog?.state()?.folder ?? ""}
           changeFolder={async (folder, signal) => {
@@ -169,7 +191,7 @@ export default Plugin.define({
           if (!ctx.signal.aborted) report("refresh", ctx.t("folders.title"), [String(error)])
           return false
         }
-      }),
+      }, selected, select),
     )
   },
 })

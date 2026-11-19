@@ -31,7 +31,7 @@
     "check": "bun run test && bun run typecheck && bun run build:gui && bun run check:package",
     "check:package": "bun script/check-package.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test src"
+    "test": "bun test --conditions=browser src"
   },
   "peerDependencies": {
     "@opencode/plugin": "~2.2.6 || ^0.0.0-dev",

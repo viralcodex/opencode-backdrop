@@ -31,4 +31,13 @@ export default {
   "fit.title": "Image fit",
   "fit.cover": "Fill background",
   "fit.contain": "Show whole image",
+  "slideshow.title": "Wallpaper slideshow",
+  "slideshow.description": "Cycle through all wallpapers in gallery order. Add at least two images to start.",
+  "transition.title": "Wallpaper transition",
+  "transition.description": "Choose how wallpapers change. Fade respects reduced-motion settings.",
+  "transition.none": "None",
+  "transition.fade": "Fade",
+  "duration.title": "Display time",
+  "duration.description": "Seconds each wallpaper stays on screen, from 5 to 86400.",
+  "duration.seconds": "seconds",
 }
