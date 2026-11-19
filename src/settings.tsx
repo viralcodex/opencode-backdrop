@@ -1,4 +1,4 @@
-import { createMemo, createRenderEffect, createSignal, For, on, onCleanup, Show, type Accessor } from "solid-js"
+import { createMemo, createRenderEffect, createSignal, createUniqueId, For, on, onCleanup, onMount, Show, type Accessor } from "solid-js"
 import { usePlugin } from "@opencode/plugin/gui"
 import type definition from "./gui"
 import { canRemoveWallpaper, changeWallpaper, checkWallpaperDuplicate, removeWallpaper, selectedWallpaper, wallpaperTitle, type WallpaperChoice } from "./model"
@@ -19,9 +19,25 @@ export function WallpaperSettings(props: {
   const settings = ctx.stores.preferences
   const [request, setRequest] = createSignal<AbortController>()
   const [folderRequest, setFolderRequest] = createSignal<AbortController>()
+  const [expanded, setExpanded] = createSignal(false)
+  const [columns, setColumns] = createSignal(1)
+  const galleryId = createUniqueId()
+  let gallery!: HTMLDivElement
   let fileInput!: HTMLInputElement
   const selected = createMemo(() => selectedWallpaper(settings.value, props.images()))
   const appearance = createMemo(() => wallpaperAppearance(settings.value))
+  const limit = () => columns() * 2 - 1
+  const visibleImages = createMemo(() => expanded() ? props.images() : props.images().slice(0, limit()))
+  onMount(() => {
+    const measure = () => {
+      const tracks = getComputedStyle(gallery).gridTemplateColumns
+      setColumns(tracks === "none" ? 1 : tracks.trim().split(/\s+/).length)
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(gallery)
+    measure()
+    onCleanup(() => observer.disconnect())
+  })
   const cancelUpload = () => { request()?.abort(); setRequest(undefined) }
   onCleanup(() => { cancelUpload(); folderRequest()?.abort() })
   createRenderEffect(on(() => [settings.value.enabled, settings.value.preset, settings.value.image], cancelUpload, { defer: true }))
@@ -118,8 +134,8 @@ export function WallpaperSettings(props: {
               />
             </div>
           }>
-            <div class="opencode-wallpaper-gallery">
-              <For each={props.images()}>
+            <div ref={gallery} id={galleryId} class="opencode-wallpaper-gallery">
+              <For each={visibleImages()}>
                 {(preset) => (
                   <div class="opencode-wallpaper-tile">
                     <button
@@ -159,6 +175,17 @@ export function WallpaperSettings(props: {
                 <span class="opencode-wallpaper-add-icon" aria-hidden="true">+</span>
               </button>
             </div>
+            <Show when={expanded() || props.images().length > limit()}>
+              <div class="opencode-wallpaper-gallery-toggle">
+                <ctx.ui.Button
+                  aria-expanded={expanded()}
+                  aria-controls={galleryId}
+                  onClick={() => setExpanded((value) => !value)}
+                >
+                  {ctx.t(expanded() ? "gallery.showLess" : "gallery.showMore")}
+                </ctx.ui.Button>
+              </div>
+            </Show>
             <input
               ref={fileInput}
               class="opencode-wallpaper-file-input"

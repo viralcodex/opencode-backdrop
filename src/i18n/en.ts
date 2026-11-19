@@ -3,6 +3,8 @@ export default {
   description: "Backdrops that suit your style",
   "enabled.title": "Show wallpaper",
   "preset.title": "Choose a wallpaper",
+  "gallery.showMore": "Show more",
+  "gallery.showLess": "Show less",
   "picker.title": "Choose wallpaper",
   "picker.description": "Choose a background without leaving the conversation.",
   "picker.search": "Search wallpapers",
