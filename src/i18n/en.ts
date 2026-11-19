@@ -9,6 +9,7 @@ export default {
   "picker.description": "Choose a background without leaving the conversation.",
   "picker.search": "Search wallpapers",
   "picker.off": "Wallpaper off",
+  "picker.on": "Wallpaper on",
   "picker.settings": "Wallpaper settings",
   "folders.title": "Wallpaper folder",
   "folders.description": "PNG, JPEG, WebP and SVG files up to 8 MiB, including subfolders.",

@@ -52,6 +52,10 @@ export function changeWallpaper(draft: { enabled: boolean; preset: string }, cho
   if (choice !== "off") draft.preset = choice
 }
 
+export function setWallpaperEnabled(draft: { enabled: boolean; preset: string }, enabled: boolean, images: readonly WallpaperChoice[]) {
+  changeWallpaper(draft, enabled ? selectedWallpaper(draft, images)?.id ?? images[0]?.id ?? "off" : "off")
+}
+
 export function wallpaperTitle(image: WallpaperChoice, t: (key: string) => string) {
   if (canRemoveWallpaper(image)) return image.title || t("image.custom")
   return image.title

@@ -3,7 +3,7 @@ import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-
 import { Schema } from "effect"
 import { wallpaperCommand } from "./command"
 import { Catalog } from "./contract"
-import { changeWallpaper, wallpaperCatalog, wallpaperTitle, type WallpaperChoice } from "./model"
+import { changeWallpaper, setWallpaperEnabled, wallpaperCatalog, wallpaperTitle, type WallpaperChoice } from "./model"
 import { appearanceKeys, Preferences, initial, slideshowControls, wallpaperFadeDuration } from "./preferences"
 import { createWallpaperImage, type WallpaperReader } from "./render"
 import { imageError, thumbnailBlob } from "./image"
@@ -12,6 +12,7 @@ import { createThumbnailCache } from "./thumbnail-cache"
 import { alignWallpaperHeaders } from "./backdrop"
 import { wallpaperCanvasStyle, wallpaperVariableStyle } from "./style"
 import { WallpaperSettings } from "./settings"
+import { WallpaperPicker } from "./picker"
 import { createWallpaperSlideshow } from "./slideshow"
 import { fadeWallpaper, wallpaperTransitionStyle } from "./transition"
 import en from "./i18n/en"
@@ -97,6 +98,10 @@ export default Plugin.define({
       slideshow.reset()
       settings.update((draft) => { changeWallpaper(draft, choice) })
     })
+    const setEnabled = (enabled: boolean) => batch(() => {
+      slideshow.reset()
+      settings.update((draft) => { setWallpaperEnabled(draft, enabled, images()) })
+    })
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)")
     const [reducedMotion, setReducedMotion] = createSignal(motion.matches)
     const motionChanged = () => setReducedMotion(motion.matches)
@@ -179,6 +184,7 @@ export default Plugin.define({
           images={images}
           selected={selected}
           select={select}
+          setEnabled={setEnabled}
           thumbnails={thumbnails}
           folder={() => catalog?.state()?.folderLabel ?? catalog?.state()?.folder ?? ""}
           changeFolder={async (folder, signal) => {
@@ -204,7 +210,15 @@ export default Plugin.define({
           if (!ctx.signal.aborted) report("refresh", ctx.t("folders.title"), [String(error)])
           return false
         }
-      }, () => settings.value.enabled ? selected()?.id ?? settings.value.preset : "off", select),
+      }, () => settings.value.enabled ? selected()?.id ?? settings.value.preset : "off", select,
+      (options, choose) => {
+        ctx.dialogs.open((dialog) => <WallpaperPicker
+          options={options}
+          enabled={() => settings.value.enabled}
+          onToggle={setEnabled}
+          onSelect={(value) => { dialog.close(); choose(value) }}
+        />)
+      }),
     )
   },
 })

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { Mutable, SelectOptions } from "@opencode/plugin/gui"
 import { Schema } from "effect"
 import { wallpaperCommand } from "./command"
-import { canRemoveWallpaper, changeWallpaper, checkWallpaperDuplicate, removeWallpaper, selectedWallpaper, wallpaperCatalog, wallpaperTitle, type WallpaperChoice } from "./model"
+import { canRemoveWallpaper, changeWallpaper, checkWallpaperDuplicate, removeWallpaper, selectedWallpaper, setWallpaperEnabled, wallpaperCatalog, wallpaperTitle, type WallpaperChoice } from "./model"
 import { Preferences, initial } from "./preferences"
 
 const customImage = "data:image/png;base64,aGVsbG8="
@@ -34,7 +34,7 @@ describe("removing wallpapers", () => {
     const images = () => wallpaperCatalog([file], settings)
     const world = picker(undefined, { preferences: settings, images })
     await world.command.run()
-    expect(world.requests[0]?.options.map((option) => option.value)).toEqual([file.id, "custom", "off", "settings"])
+    expect(world.requests[0]?.options.map((option) => option.value)).toEqual([file.id, "custom"])
   })
 
   test("removes an unselected uploaded image without changing the active folder wallpaper", async () => {
@@ -139,17 +139,13 @@ describe("wallpaper slash picker", () => {
     const world = picker(undefined)
     await world.command.run()
     expect(world.requests[0]?.current).toBe("off")
-    expect(world.requests[0]?.options.map((option) => option.value)).toEqual([
-      "off",
-      "settings",
-    ])
+    expect(world.requests[0]?.options).toEqual([])
     expect(world.value).toEqual(world.before)
   })
 
   test.each([
     ["file:example.png", false, "file:example.png", true],
     ["custom", false, "custom", true],
-    ["off", true, "file:example.png", false],
   ] as const)("choosing %s preserves the saved image, fit and strength", async (choice, enabled, preset, shown) => {
     const world = picker(choice, { preferences: { enabled, preset: "file:example.png", image: customImage }, images: () => wallpaperCatalog([{ id: "file:example.png", title: "example", version: "1" }], { image: customImage }) })
     await world.command.run()
@@ -180,13 +176,12 @@ describe("wallpaper slash picker", () => {
     expect(world.value).toEqual({ ...world.before, preset: "file:example.png", enabled: true })
   })
 
-  test("keeps saved uploads, off and settings accessible when the folder refresh fails", async () => {
-    const world = picker("off", { preferences: { image: customImage }, refresh: async () => false })
+  test("keeps saved uploads and settings accessible when the folder refresh fails", async () => {
+    const world = picker("settings", { preferences: { image: customImage }, refresh: async () => false })
     await world.command.run()
-    expect(world.requests[0]?.options.map((option) => option.value)).toEqual([
-      "custom", "off", "settings",
-    ])
+    expect(world.requests[0]?.options.map((option) => option.value)).toEqual(["custom"])
     expect(world.value).toEqual({ ...world.before, enabled: false })
+    expect(world.pages).toEqual(["wallpaper"])
   })
 
   test.each(["before refresh", "during refresh", "during dialog"] as const)("cancellation %s prevents selection changes", async (stage) => {
@@ -209,6 +204,22 @@ describe("wallpaper slash picker", () => {
   })
 })
 
+test("wallpaper on/off preserves the saved choice, falls back to available images, and stays off with an empty gallery", () => {
+  const images = [{ id: "file:first.png", title: "first", version: "1" }, { id: "custom", title: "custom", version: "1", image: customImage }]
+  const settings = { ...initial, enabled: true, preset: "custom", image: customImage, strength: 37, fit: "contain" as const }
+  const saved = structuredClone(settings)
+  setWallpaperEnabled(settings, false, images)
+  expect(settings).toEqual({ ...saved, enabled: false })
+  setWallpaperEnabled(settings, true, images)
+  expect(settings).toEqual(saved)
+  settings.preset = "missing"
+  setWallpaperEnabled(settings, true, images)
+  expect(settings.preset).toBe("file:first.png")
+  setWallpaperEnabled(settings, true, [])
+  expect(settings.enabled).toBe(false)
+  expect(settings.preset).toBe("file:first.png")
+})
+
 function picker(choice: string | undefined, config: {
   preferences?: Partial<typeof initial>
   refresh?: () => Promise<boolean>
@@ -223,15 +234,12 @@ function picker(choice: string | undefined, config: {
   const command = wallpaperCommand({
     t: (key) => key,
     signal: config.signal ?? new AbortController().signal,
-    dialogs: {
-      async select<T>(options: SelectOptions<T>) {
-        requests.push(options)
-        config.onSelect?.()
-        return options.options.find((option) => option.value === choice)?.value
-      },
-    },
     layout: { settings: (page) => { pages.push(page) } },
   }, config.images ?? (() => wallpaperCatalog([], value)), config.refresh ?? (async () => true),
-  () => value.enabled ? value.preset : "off", (selected) => changeWallpaper(value, selected))
+  () => value.enabled ? value.preset : "off", (selected) => changeWallpaper(value, selected), (options, choose) => {
+    requests.push(options)
+    config.onSelect?.()
+    if (choice && (choice === "off" || choice === "settings" || options.options.some((option) => option.value === choice))) choose(choice)
+  })
   return { command, value, before, requests, pages }
 }
