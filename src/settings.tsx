@@ -1,7 +1,7 @@
 import { createMemo, createRenderEffect, createSignal, createUniqueId, For, on, onCleanup, onMount, Show, type Accessor } from "solid-js"
 import { usePlugin } from "@opencode/plugin/gui"
 import type definition from "./gui"
-import { canRemoveWallpaper, changeWallpaper, checkWallpaperDuplicate, removeWallpaper, selectedWallpaper, wallpaperTitle, type WallpaperChoice } from "./model"
+import { canRemoveWallpaper, changeWallpaper, checkWallpaperDuplicate, removeWallpaper, wallpaperTitle, type WallpaperChoice } from "./model"
 import { uploadImage } from "./image"
 import { appearanceControls, appearanceKeys, slideshowControls, wallpaperAppearance, type WallpaperTransition } from "./preferences"
 import type { ThumbnailCache } from "./thumbnail-cache"
@@ -11,6 +11,7 @@ export function WallpaperSettings(props: {
   images: Accessor<readonly WallpaperChoice[]>
   selected: Accessor<WallpaperChoice | undefined>
   select: (choice: string) => void
+  setEnabled: (enabled: boolean) => void
   thumbnails: ThumbnailCache
   folder: Accessor<string>
   changeFolder: (folder: string, signal: AbortSignal) => Promise<boolean>
@@ -26,7 +27,6 @@ export function WallpaperSettings(props: {
   let gallery!: HTMLDivElement
   let slideshowDescription!: HTMLSpanElement
   let fileInput!: HTMLInputElement
-  const selected = createMemo(() => selectedWallpaper(settings.value, props.images()))
   const appearance = createMemo(() => wallpaperAppearance(settings.value))
   const limit = () => columns() * 2 - 1
   const visibleImages = createMemo(() => expanded() ? props.images() : props.images().slice(0, limit()))
@@ -114,7 +114,7 @@ export function WallpaperSettings(props: {
               hideLabel
               checked={settings.value.enabled}
               disabled={!settings.value.enabled && !props.images().length}
-              onChange={(value) => select(value ? selected()?.id ?? props.images()[0]?.id ?? "off" : "off")}
+              onChange={(value) => { cancelUpload(); props.setEnabled(value) }}
             />
           </ctx.ui.SettingsRow>
           <Show when={ctx.desktop}>
