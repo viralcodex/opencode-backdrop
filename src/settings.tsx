@@ -134,58 +134,60 @@ export function WallpaperSettings(props: {
               />
             </div>
           }>
-            <div ref={gallery} id={galleryId} class="opencode-wallpaper-gallery">
-              <For each={visibleImages()}>
-                {(preset) => (
-                  <div class="opencode-wallpaper-tile">
-                    <button
-                      type="button"
-                      class="opencode-wallpaper-choice"
-                      aria-pressed={props.selected()?.id === preset.id}
-                      onClick={() => select(preset.id)}
-                    >
-                      <WallpaperThumbnail choice={preset} cache={props.thumbnails} t={ctx.t} />
-                      <span>{wallpaperTitle(preset, ctx.t)}</span>
-                    </button>
-                    <Show when={canRemoveWallpaper(preset)}>
+            <div class="opencode-wallpaper-gallery-section">
+              <div ref={gallery} id={galleryId} class="opencode-wallpaper-gallery">
+                <For each={visibleImages()}>
+                  {(preset) => (
+                    <div class="opencode-wallpaper-tile">
                       <button
                         type="button"
-                        class="opencode-wallpaper-remove"
-                        aria-label={`${ctx.t("image.remove")}: ${wallpaperTitle(preset, ctx.t)}`}
-                        title={`${ctx.t("image.remove")}: ${wallpaperTitle(preset, ctx.t)}`}
-                        onClick={() => {
-                          cancelUpload()
-                          settings.update((draft) => { removeWallpaper(draft, preset, props.images()) })
-                        }}
+                        class="opencode-wallpaper-choice"
+                        aria-pressed={props.selected()?.id === preset.id}
+                        onClick={() => select(preset.id)}
                       >
-                        X
+                        <WallpaperThumbnail choice={preset} cache={props.thumbnails} t={ctx.t} />
+                        <span>{wallpaperTitle(preset, ctx.t)}</span>
                       </button>
-                    </Show>
-                  </div>
-                )}
-              </For>
-              <button
-                type="button"
-                class="opencode-wallpaper-add"
-                aria-label={ctx.t(request() ? "image.loading" : "image.choose")}
-                aria-busy={!!request()}
-                disabled={!!request()}
-                onClick={() => fileInput.click()}
-              >
-                <span class="opencode-wallpaper-add-icon" aria-hidden="true">+</span>
-              </button>
-            </div>
-            <Show when={expanded() || props.images().length > limit()}>
-              <div class="opencode-wallpaper-gallery-toggle">
-                <ctx.ui.Button
-                  aria-expanded={expanded()}
-                  aria-controls={galleryId}
-                  onClick={() => setExpanded((value) => !value)}
+                      <Show when={canRemoveWallpaper(preset)}>
+                        <button
+                          type="button"
+                          class="opencode-wallpaper-remove"
+                          aria-label={`${ctx.t("image.remove")}: ${wallpaperTitle(preset, ctx.t)}`}
+                          title={`${ctx.t("image.remove")}: ${wallpaperTitle(preset, ctx.t)}`}
+                          onClick={() => {
+                            cancelUpload()
+                            settings.update((draft) => { removeWallpaper(draft, preset, props.images()) })
+                          }}
+                        >
+                          X
+                        </button>
+                      </Show>
+                    </div>
+                  )}
+                </For>
+                <button
+                  type="button"
+                  class="opencode-wallpaper-add"
+                  aria-label={ctx.t(request() ? "image.loading" : "image.choose")}
+                  aria-busy={!!request()}
+                  disabled={!!request()}
+                  onClick={() => fileInput.click()}
                 >
-                  {ctx.t(expanded() ? "gallery.showLess" : "gallery.showMore")}
-                </ctx.ui.Button>
+                  <span class="opencode-wallpaper-add-icon" aria-hidden="true">+</span>
+                </button>
               </div>
-            </Show>
+              <Show when={expanded() || props.images().length > limit()}>
+                <div class="opencode-wallpaper-gallery-toggle">
+                  <ctx.ui.Button
+                    aria-expanded={expanded()}
+                    aria-controls={galleryId}
+                    onClick={() => setExpanded((value) => !value)}
+                  >
+                    {ctx.t(expanded() ? "gallery.showLess" : "gallery.showMore")}
+                  </ctx.ui.Button>
+                </div>
+              </Show>
+            </div>
             <input
               ref={fileInput}
               class="opencode-wallpaper-file-input"

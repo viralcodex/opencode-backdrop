@@ -41,6 +41,13 @@
   }
 }
 
+.opencode-wallpaper-gallery-section {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
 .opencode-wallpaper-gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 160px), 1fr));
@@ -55,7 +62,6 @@
 }
 
 .opencode-wallpaper-settings [data-action="wallpaper-preset"] > [data-slot] {
-  display: block;
   width: 100%;
   max-width: none;
   min-width: 0;
@@ -72,7 +78,6 @@
 .opencode-wallpaper-gallery-toggle {
   display: flex;
   justify-content: center;
-  margin-top: 12px;
   width: 100%;
 }
 
