@@ -1,0 +1,16 @@
+name: PR review event
+
+on:
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+
+# This unprivileged workflow only wakes the trusted workflow_run handler.
+# It does not check out code, read secrets, or publish approval statuses.
+permissions: {}
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - run: "true"
