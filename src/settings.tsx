@@ -1,17 +1,16 @@
-import { createMemo, createRenderEffect, createSignal, For, on, onCleanup, Show, type Accessor } from "solid-js"
+import { createMemo, createRenderEffect, createSignal, createUniqueId, For, on, onCleanup, onMount, Show, type Accessor } from "solid-js"
 import { usePlugin } from "@opencode/plugin/gui"
 import type definition from "./gui"
 import { canRemoveWallpaper, changeWallpaper, checkWallpaperDuplicate, removeWallpaper, selectedWallpaper, wallpaperTitle, type WallpaperChoice } from "./model"
 import { uploadImage } from "./image"
-import { appearanceControls, appearanceKeys, wallpaperAppearance } from "./preferences"
-import type { WallpaperImage } from "./render"
+import { appearanceControls, appearanceKeys, slideshowControls, wallpaperAppearance, type WallpaperTransition } from "./preferences"
 import type { ThumbnailCache } from "./thumbnail-cache"
-import { wallpaperBackground } from "./style"
 import { WallpaperThumbnail } from "./thumbnail"
 
 export function WallpaperSettings(props: {
   images: Accessor<readonly WallpaperChoice[]>
-  image: WallpaperImage
+  selected: Accessor<WallpaperChoice | undefined>
+  select: (choice: string) => void
   thumbnails: ThumbnailCache
   folder: Accessor<string>
   changeFolder: (folder: string, signal: AbortSignal) => Promise<boolean>
@@ -20,13 +19,37 @@ export function WallpaperSettings(props: {
   const settings = ctx.stores.preferences
   const [request, setRequest] = createSignal<AbortController>()
   const [folderRequest, setFolderRequest] = createSignal<AbortController>()
+  const [expanded, setExpanded] = createSignal(false)
+  const [columns, setColumns] = createSignal(1)
+  const [branchOffset, setBranchOffset] = createSignal(0)
+  const galleryId = createUniqueId()
+  let gallery!: HTMLDivElement
+  let slideshowDescription!: HTMLSpanElement
   let fileInput!: HTMLInputElement
   const selected = createMemo(() => selectedWallpaper(settings.value, props.images()))
   const appearance = createMemo(() => wallpaperAppearance(settings.value))
-  const title = createMemo(() => {
-    if (!settings.value.enabled) return ctx.t("picker.off")
-    const choice = selected()
-    return choice ? wallpaperTitle(choice, ctx.t) : ctx.t("folders.missing")
+  const limit = () => columns() * 2 - 1
+  const visibleImages = createMemo(() => expanded() ? props.images() : props.images().slice(0, limit()))
+  onMount(() => {
+    const measure = () => {
+      const tracks = getComputedStyle(gallery).gridTemplateColumns
+      setColumns(tracks === "none" ? 1 : tracks.trim().split(/\s+/).length)
+      const text = slideshowDescription.firstChild
+      if (text instanceof Text && text.length) {
+        const range = document.createRange()
+        range.setStart(text, 0)
+        range.setEnd(text, 1)
+        const letter = range.getBoundingClientRect()
+        const description = slideshowDescription.getBoundingClientRect()
+        const center = letter.left + letter.width / 2
+        setBranchOffset(getComputedStyle(slideshowDescription).direction === "rtl" ? description.right - center : center - description.left)
+      }
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(gallery)
+    observer.observe(slideshowDescription)
+    measure()
+    onCleanup(() => observer.disconnect())
   })
   const cancelUpload = () => { request()?.abort(); setRequest(undefined) }
   onCleanup(() => { cancelUpload(); folderRequest()?.abort() })
@@ -34,7 +57,7 @@ export function WallpaperSettings(props: {
 
   function select(choice: string) {
     cancelUpload()
-    settings.update((draft) => { changeWallpaper(draft, choice) })
+    props.select(choice)
   }
 
   async function upload(file: File) {
@@ -81,13 +104,6 @@ export function WallpaperSettings(props: {
   return (
     <ctx.ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")}>
       <div class="opencode-wallpaper-settings">
-        <div
-          class="opencode-wallpaper-preview"
-          style={wallpaperBackground(settings.value, props.image.url)}
-          role="img"
-          aria-busy={props.image.loading}
-          aria-label={title()}
-        />
         <ctx.ui.SettingsSection>
           <ctx.ui.SettingsRow
             id="wallpaper-enabled"
@@ -131,46 +147,63 @@ export function WallpaperSettings(props: {
               />
             </div>
           }>
-            <div class="opencode-wallpaper-gallery">
-              <For each={props.images()}>
-                {(preset) => (
-                  <div class="opencode-wallpaper-tile">
-                    <button
-                      type="button"
-                      class="opencode-wallpaper-choice"
-                      aria-pressed={settings.value.preset === preset.id}
-                      onClick={() => select(preset.id)}
-                    >
-                      <WallpaperThumbnail choice={preset} cache={props.thumbnails} t={ctx.t} />
-                      <span>{wallpaperTitle(preset, ctx.t)}</span>
-                    </button>
-                    <Show when={canRemoveWallpaper(preset)}>
+            <div class="opencode-wallpaper-gallery-section">
+              <div ref={gallery} id={galleryId} class="opencode-wallpaper-gallery">
+                <For each={visibleImages()}>
+                  {(preset) => (
+                    <div class="opencode-wallpaper-tile">
                       <button
                         type="button"
-                        class="opencode-wallpaper-remove"
-                        aria-label={`${ctx.t("image.remove")}: ${wallpaperTitle(preset, ctx.t)}`}
-                        title={`${ctx.t("image.remove")}: ${wallpaperTitle(preset, ctx.t)}`}
-                        onClick={() => {
-                          cancelUpload()
-                          settings.update((draft) => { removeWallpaper(draft, preset, props.images()) })
-                        }}
+                        class="opencode-wallpaper-choice"
+                        aria-pressed={props.selected()?.id === preset.id}
+                        onClick={() => select(preset.id)}
                       >
-                        X
+                        <WallpaperThumbnail choice={preset} cache={props.thumbnails} t={ctx.t} />
+                        <span>{wallpaperTitle(preset, ctx.t)}</span>
                       </button>
-                    </Show>
-                  </div>
-                )}
-              </For>
-              <button
-                type="button"
-                class="opencode-wallpaper-add"
-                aria-label={ctx.t(request() ? "image.loading" : "image.choose")}
-                aria-busy={!!request()}
-                disabled={!!request()}
-                onClick={() => fileInput.click()}
-              >
-                <span class="opencode-wallpaper-add-icon" aria-hidden="true">+</span>
-              </button>
+                      <Show when={canRemoveWallpaper(preset)}>
+                        <button
+                          type="button"
+                          class="opencode-wallpaper-remove"
+                          aria-label={`${ctx.t("image.remove")}: ${wallpaperTitle(preset, ctx.t)}`}
+                          title={`${ctx.t("image.remove")}: ${wallpaperTitle(preset, ctx.t)}`}
+                          onClick={() => {
+                            cancelUpload()
+                            settings.update((draft) => { removeWallpaper(draft, preset, props.images()) })
+                          }}
+                        >
+                          X
+                        </button>
+                      </Show>
+                    </div>
+                  )}
+                </For>
+                <button
+                  type="button"
+                  class="opencode-wallpaper-add"
+                  aria-label={ctx.t(request() ? "image.loading" : "image.choose")}
+                  aria-busy={!!request()}
+                  disabled={!!request()}
+                  onClick={() => fileInput.click()}
+                >
+                  <span class="opencode-wallpaper-add-icon" aria-hidden="true">+</span>
+                </button>
+              </div>
+              <Show when={expanded() || props.images().length > limit()}>
+                <div class="opencode-wallpaper-gallery-toggle">
+                  <button
+                    type="button"
+                    data-component="button-v2"
+                    data-variant="neutral"
+                    data-size="normal"
+                    aria-expanded={expanded()}
+                    aria-controls={galleryId}
+                    onClick={() => setExpanded((value) => !value)}
+                  >
+                    {ctx.t(expanded() ? "gallery.showLess" : "gallery.showMore")}
+                  </button>
+                </div>
+              </Show>
             </div>
             <input
               ref={fileInput}
@@ -187,6 +220,67 @@ export function WallpaperSettings(props: {
               }}
             />
           </ctx.ui.SettingsRow>
+          <div class="opencode-wallpaper-slideshow" role="group" aria-label={ctx.t("slideshow.title")} style={{ "--wallpaper-branch-center": `${branchOffset()}px` }}>
+            <ctx.ui.SettingsRow
+              id="wallpaper-slideshow"
+              title={ctx.t("slideshow.title")}
+              description={
+                <span ref={slideshowDescription} class="opencode-wallpaper-slideshow-description" data-expanded={settings.value.slideshow ? "" : undefined}>
+                  {ctx.t("slideshow.description")}
+                </span>
+              }
+            >
+              <ctx.ui.Switch
+                label={ctx.t("slideshow.title")}
+                hideLabel
+                checked={!!settings.value.slideshow}
+                disabled={!settings.value.slideshow && props.images().length < 2}
+                onChange={(value) => settings.update((draft) => { draft.slideshow = value })}
+              />
+            </ctx.ui.SettingsRow>
+            <Show when={settings.value.slideshow}>
+              <div class="opencode-wallpaper-slideshow-options">
+                <ctx.ui.SettingsRow
+                  id="wallpaper-transition"
+                  title={ctx.t("transition.title")}
+                  description={ctx.t("transition.description")}
+                >
+                  <ctx.ui.Select<WallpaperTransition>
+                    label={ctx.t("transition.title")}
+                    value={settings.value.transition ?? slideshowControls.transition}
+                    options={[
+                      { value: "none", label: ctx.t("transition.none") },
+                      { value: "fade", label: ctx.t("transition.fade") },
+                    ]}
+                    onChange={(value) => settings.update((draft) => { draft.transition = value })}
+                  />
+                </ctx.ui.SettingsRow>
+                <ctx.ui.SettingsRow
+                  id="wallpaper-duration"
+                  title={ctx.t("duration.title")}
+                  description={ctx.t("duration.description")}
+                >
+                  <label class="opencode-wallpaper-duration">
+                    <input
+                      type="number"
+                      min={slideshowControls.min}
+                      max={slideshowControls.max}
+                      step="1"
+                      value={settings.value.duration ?? slideshowControls.duration}
+                      aria-label={ctx.t("duration.title")}
+                      onChange={(event) => {
+                        const input = event.currentTarget
+                        const value = input.valueAsNumber
+                        if (Number.isInteger(value) && value >= slideshowControls.min && value <= slideshowControls.max) {
+                          settings.update((draft) => { draft.duration = value })
+                        } else input.value = String(settings.value.duration ?? slideshowControls.duration)
+                      }}
+                    />
+                  </label>
+                </ctx.ui.SettingsRow>
+              </div>
+            </Show>
+          </div>
           <For each={appearanceKeys}>
             {(key) => <ctx.ui.SettingsRow
               id={`wallpaper-${key}`}

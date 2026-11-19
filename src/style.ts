@@ -158,8 +158,3 @@ export function wallpaperVariableStyle(settings: WallpaperPreferences, image: st
     .map(([property, value]) => `${property}: ${value};`).join("\n  ")
   return `${wallpaperPanels} {\n  ${declarations}\n}`
 }
-
-export function wallpaperStyle(settings: WallpaperPreferences, image: string) {
-  const variables = wallpaperVariableStyle(settings, image)
-  return variables ? variables + wallpaperCanvasStyle : ""
-}

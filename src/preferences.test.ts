@@ -1,12 +1,28 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { Preferences, initial, wallpaperAppearance } from "./preferences"
+import { Preferences, initial, slideshowControls, wallpaperAppearance } from "./preferences"
 import { wallpaperBackground } from "./style"
 
 test("starts with wallpaper off and no selection while retaining unknown selections from old saves", () => {
   expect(Schema.decodeUnknownSync(Preferences)(initial)).toMatchObject({ enabled: false, preset: "", image: "" })
   const saved = { ...initial, enabled: true, preset: "legacy-selection" }
   expect(Schema.decodeUnknownSync(Preferences)(saved)).toEqual(saved)
+})
+
+describe("wallpaper slideshow preferences", () => {
+  test("persists slideshow options at both display-time limits", () => {
+    for (const [transition, duration] of [["none", slideshowControls.min], ["fade", slideshowControls.max]] as const) {
+      const saved = { ...initial, slideshow: true, duration, transition }
+      expect(Schema.decodeUnknownSync(Preferences)(JSON.parse(JSON.stringify(saved)))).toEqual(saved)
+    }
+  })
+
+  test("rejects invalid display times and unknown transitions", () => {
+    for (const duration of [0, 4, 86401, 5.5, NaN, Infinity, "60"]) {
+      expect(() => Schema.decodeUnknownSync(Preferences)({ ...initial, duration })).toThrow()
+    }
+    expect(() => Schema.decodeUnknownSync(Preferences)({ ...initial, transition: "spin" })).toThrow()
+  })
 })
 
 describe("wallpaper tint and brightness", () => {

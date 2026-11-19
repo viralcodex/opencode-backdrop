@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "opencode-backdrop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Use your own local wallpapers in OpenCode Desktop",
   "type": "module",
   "license": "MIT",
@@ -31,10 +31,10 @@
     "check": "bun run test && bun run typecheck && bun run build:gui && bun run check:package",
     "check:package": "bun script/check-package.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test src"
+    "test": "bun test --conditions=browser src"
   },
   "peerDependencies": {
-    "@opencode/plugin": "~2.2.6 || ^0.0.0-dev",
+    "@opencode/plugin": "~2.2.6 || ~2.3.2 || ^0.0.0-dev",
     "effect": "^4.1.0",
     "solid-js": "^1.9.17"
   },

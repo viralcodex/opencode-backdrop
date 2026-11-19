@@ -41,16 +41,17 @@
   }
 }
 
-.opencode-wallpaper-preview {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  height: 180px;
-  border-radius: 10px;
-  background-color: var(--v2-background-bg-base);
-  background-position: center;
-  background-clip: padding-box;
-  border: 1px solid var(--v2-border-border-base);
+.opencode-wallpaper-gallery-section {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.opencode-wallpaper-gallery-toggle {
+  display: flex;
+  justify-content: center;
+  width: 100%;
 }
 
 .opencode-wallpaper-gallery {
@@ -220,8 +221,88 @@
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 480px) {
-  .opencode-wallpaper-preview {
-    height: 140px;
+.opencode-wallpaper-duration {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.opencode-wallpaper-slideshow {
+  --wallpaper-branch-offset: calc(var(--wallpaper-branch-center, 0px) - 1px);
+  border-bottom: 0.5px solid var(--v2-border-border-base);
+}
+
+.opencode-wallpaper-slideshow [data-component="settings-row"] {
+  border-bottom: 0;
+}
+
+.opencode-wallpaper-slideshow-description {
+  display: block;
+  position: relative;
+}
+
+.opencode-wallpaper-slideshow-description[data-expanded]::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: var(--wallpaper-branch-offset, 0px);
+  top: 100%;
+  /* The native description's bottom margin is -3.5px. Fill the remaining row padding. */
+  height: calc(var(--settings-list-row-padding, 20px) - 3.5px);
+  border-inline-start: 0.5px solid var(--v2-border-border-base);
+  pointer-events: none;
+}
+
+.opencode-wallpaper-slideshow-options {
+  --settings-list-row-padding: 12px;
+  padding-inline-start: 30px;
+  padding-bottom: 16px;
+
+  > [data-component="settings-row"] {
+    position: relative;
+
+    &::before,
+    &::after {
+      content: "";
+      position: absolute;
+      inset-inline-start: calc(-30px + var(--wallpaper-branch-offset, 0px));
+      pointer-events: none;
+    }
+
+    &::before {
+      inset-block: 0;
+      border-inline-start: 0.5px solid var(--v2-border-border-base);
+    }
+
+    &::after {
+      top: 50%;
+      width: calc(26px - var(--wallpaper-branch-offset, 0px));
+      border-block-start: 0.5px solid var(--v2-border-border-base);
+    }
+
+    &:last-child::before {
+      inset-block-end: auto;
+      height: 50%;
+    }
   }
+}
+
+.opencode-wallpaper-duration input {
+  width: 8ch;
+  text-align: center;
+  padding: 6px 8px;
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 6px;
+  background: var(--v2-background-bg-layer-01);
+  color: var(--v2-text-text-base);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.opencode-wallpaper-duration input:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 2px;
+}
+
+.opencode-wallpaper-duration input:disabled {
+  opacity: 0.5;
 }

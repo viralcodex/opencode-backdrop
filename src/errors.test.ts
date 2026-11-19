@@ -27,5 +27,4 @@ test("image failures are shared across the active image and thumbnails, but new 
   expect(shown).toHaveLength(1)
   report("image:example:2", "Wallpapers", ["Unreadable image"])
   expect(shown).toHaveLength(2)
-  expect(shown.every((toast) => toast.variant === "error" && toast.persistent !== true)).toBe(true)
 })

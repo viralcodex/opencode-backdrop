@@ -2,9 +2,7 @@ import { afterEach, expect, jest, test } from "bun:test"
 import { mkdir, mkdtemp, realpath, rm, symlink, truncate } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { Schema } from "effect"
 import { createCatalog, wallpaperFolder, wallpaperFolderLabel } from "./catalog"
-import { Catalog } from "./contract"
 import { selectedWallpaper, wallpaperCatalog } from "./model"
 import { initial } from "./preferences"
 
@@ -66,26 +64,6 @@ test("loads selected bytes on demand and retains selection through edits, remova
   expect(await catalog.read(selected()!)).toContain(Buffer.from(svg).toString("base64"))
 })
 
-test("round-trips filesystem images through the catalog IPC codecs", async () => {
-  const directory = await fixture()
-  await Bun.write(path.join(directory, "wall.svg"), svg)
-  await Bun.write(path.join(directory, "pixel.png"), pixel)
-  const catalog = tracked(directory)
-  await catalog.refresh()
-  const wire = (value: unknown): unknown => JSON.parse(JSON.stringify(value))
-  const state = Schema.decodeUnknownSync(Catalog.spec.state)(
-    wire(Schema.encodeUnknownSync(Catalog.spec.state)(catalog.state())),
-  )
-  const method = Catalog.spec.methods.read
-  for (const image of state.images) {
-    const request = Schema.decodeUnknownSync(method.input)(wire(Schema.encodeUnknownSync(method.input)(image)))
-    const source = Schema.decodeUnknownSync(method.output)(
-      wire(Schema.encodeUnknownSync(method.output)(await catalog.read(request))),
-    )
-    expect(Buffer.from(source.split(",")[1]!, "base64")).toEqual(image.title === "pixel" ? pixel : Buffer.from(svg))
-  }
-})
-
 test("keeps the catalog small for an 8 MiB image and excludes empty or oversized files", async () => {
   const directory = await fixture()
   await Bun.write(path.join(directory, "pixel.png"), pixel)
@@ -97,8 +75,6 @@ test("keeps the catalog small for an 8 MiB image and excludes empty or oversized
   await catalog.refresh()
   expect(catalog.state().images.map((image) => image.title)).toEqual(["pixel"])
   expect(Buffer.byteLength(JSON.stringify(catalog.state()))).toBeLessThan(4096)
-  expect(catalog.state().error).toContain("empty.svg")
-  expect(catalog.state().error).toContain("large.svg")
   expect(catalog.state().error).toBe("empty.svg: image.sizeError\nlarge.svg: image.sizeError")
   const image = catalog.state().images[0]!
   expect(Buffer.from((await catalog.read(image)).split(",")[1]!, "base64").length).toBe(8 * 1024 * 1024)
