@@ -134,7 +134,7 @@ export function WallpaperSettings(props: {
               />
             </div>
           }>
-            <div class="opencode-wallpaper-gallery-section">
+            <div class="opencode-wallpaper-gallery-section" style={{ display: "grid", gap: "12px", width: "100%", "min-width": "0" }}>
               <div ref={gallery} id={galleryId} class="opencode-wallpaper-gallery">
                 <For each={visibleImages()}>
                   {(preset) => (
@@ -177,7 +177,7 @@ export function WallpaperSettings(props: {
                 </button>
               </div>
               <Show when={expanded() || props.images().length > limit()}>
-                <div class="opencode-wallpaper-gallery-toggle">
+                <div class="opencode-wallpaper-gallery-toggle" style={{ display: "flex", "justify-content": "center", width: "100%" }}>
                   <ctx.ui.Button
                     aria-expanded={expanded()}
                     aria-controls={galleryId}
