@@ -1,8 +1,9 @@
-import { createEffect, createMemo, createRenderEffect, onCleanup, untrack, type Accessor } from "solid-js"
+import { batch, createEffect, createMemo, createRenderEffect, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { decodeWallpaper, wallpaperBlob } from "./image"
 import { sameWallpaper, type WallpaperChoice } from "./model"
 import type { ThumbnailCache, ThumbnailLease } from "./thumbnail-cache"
+import { wallpaperFadeDuration } from "./preferences"
 
 export type WallpaperReader = (image: WallpaperChoice, signal: AbortSignal) => Promise<string>
 
@@ -15,25 +16,51 @@ function imageSource(selected: Accessor<WallpaperChoice | undefined>) {
 
 export type WallpaperFrame = { url: string; width: number; height: number }
 
+export function createWallpaperVisibility(enabled: Accessor<boolean>, loaded: Accessor<boolean>, reducedMotion: Accessor<boolean>) {
+  const [paint, setPaint] = createSignal(enabled())
+  const [fade, setFade] = createSignal<{ show: boolean; duration: number }>()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const cancel = () => { clearTimeout(timer); timer = undefined }
+  const start = (show: boolean) => {
+    cancel()
+    const duration = loaded() && !reducedMotion() ? wallpaperFadeDuration : 0
+    batch(() => {
+      setFade(duration ? { show, duration } : undefined)
+      if (!duration && !show) setPaint(false)
+    })
+    if (duration) timer = setTimeout(() => {
+      timer = undefined
+      batch(() => { setFade(undefined); if (!show) setPaint(false) })
+    }, duration)
+  }
+  createEffect(on(() => [enabled(), reducedMotion()], ([show, reduced]) => {
+    cancel()
+    if (!show) return start(false)
+    setPaint(true)
+    if (reduced) setFade(undefined)
+  }))
+  createEffect(on(() => enabled() && loaded(), (show, previous) => {
+    if (show && !previous) start(true)
+  }))
+  onCleanup(cancel)
+  return { enabled: paint, fade }
+}
+
 export function createWallpaperImage(selected: Accessor<WallpaperChoice | undefined>, read: WallpaperReader, transition: Accessor<number> = () => 0) {
-  const [state, setState] = createStore({ url: "", width: 0, height: 0, loading: false, error: "", previous: undefined as WallpaperFrame | undefined, transition: 0 })
-  let current: WallpaperFrame | undefined
-  let previous: WallpaperFrame | undefined
+  const [state, setState] = createStore({ url: "", width: 0, height: 0, loading: false, error: "", choice: undefined as WallpaperChoice | undefined, previous: undefined as WallpaperFrame | undefined, transition: 0 })
   let expiry: ReturnType<typeof setTimeout> | undefined
   const releasePrevious = () => {
     clearTimeout(expiry)
     expiry = undefined
-    if (previous) URL.revokeObjectURL(previous.url)
-    previous = undefined
+    if (state.previous) URL.revokeObjectURL(state.previous.url)
     setState({ previous: undefined, transition: 0 })
   }
   onCleanup(() => {
     releasePrevious()
-    if (current) URL.revokeObjectURL(current.url)
+    if (state.url) URL.revokeObjectURL(state.url)
   })
   const source = imageSource(selected)
-  createEffect(() => {
-    const choice = source()
+  createEffect(on(source, (choice) => {
     const controller = new AbortController()
     let url = ""
     onCleanup(() => {
@@ -44,9 +71,12 @@ export function createWallpaperImage(selected: Accessor<WallpaperChoice | undefi
     setState({ loading: !!choice, error: "" })
     if (!choice) {
       releasePrevious()
-      if (current) URL.revokeObjectURL(current.url)
-      current = undefined
-      setState({ url: "", width: 0, height: 0 })
+      if (state.url) URL.revokeObjectURL(state.url)
+      setState({ url: "", width: 0, height: 0, choice: undefined })
+      return
+    }
+    if (state.url && sameWallpaper(choice, state.choice)) {
+      setState({ loading: false })
       return
     }
     void (async () => {
@@ -58,12 +88,11 @@ export function createWallpaperImage(selected: Accessor<WallpaperChoice | undefi
         controller.signal.throwIfAborted()
         releasePrevious()
         const duration = untrack(transition)
-        if (current && duration > 0) previous = current
-        else if (current) URL.revokeObjectURL(current.url)
-        current = { url, width: image.naturalWidth, height: image.naturalHeight }
-        // The frame now owns this URL. Source cleanup only releases pending reads.
+        const previous = state.url && duration > 0 ? { url: state.url, width: state.width, height: state.height } : undefined
+        if (state.url && !previous) URL.revokeObjectURL(state.url)
+        const current = { url, width: image.naturalWidth, height: image.naturalHeight }
         url = ""
-        setState({ ...current, previous, transition: previous ? duration : 0, loading: false, error: "" })
+        setState({ ...current, choice, previous, transition: previous ? duration : 0, loading: false, error: "" })
         if (previous) expiry = setTimeout(releasePrevious, duration)
       } catch (error) {
         if (url) URL.revokeObjectURL(url)
@@ -71,7 +100,7 @@ export function createWallpaperImage(selected: Accessor<WallpaperChoice | undefi
         if (!controller.signal.aborted) setState({ loading: false, error: error instanceof Error ? error.message : String(error) })
       }
     })()
-  })
+  }))
   return state
 }
 

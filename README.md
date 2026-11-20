@@ -53,3 +53,13 @@ You can set an initial folder with an absolute path instead of choosing one in S
 ```
 
 The folder chosen in Settings takes precedence over this option.
+
+## Development
+
+```sh
+bun run check
+bun run test:styles
+bun run test:storage /path/to/opencode
+```
+
+`check` includes native Node filesystem-watcher tests and rebuilds the GUI bundle. `test:styles` runs that bundle's setup, wallpaper switching, stylesheet cleanup, and gallery-toggle checks in headless Chrome; set `CHROME_BIN` if Chrome is installed elsewhere. `test:storage` checks migration against an OpenCode checkout's actual persistence decoder. Pass the checkout path or set `OPENCODE_CHECKOUT`.

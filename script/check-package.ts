@@ -8,7 +8,6 @@ for (const [name, version] of [manifest.devDependencies, manifest.peerDependenci
   assert(!/^(?:link:|file:|workspace:)/.test(version), `Local dependency cannot be published: ${name}`)
 }
 
-// Ignore lifecycle scripts during package inspection.
 const result = Bun.spawn(["npm", "pack", "--dry-run", "--ignore-scripts", "--json"], {
   cwd: fileURLToPath(new URL("..", import.meta.url)),
   stdout: "pipe",

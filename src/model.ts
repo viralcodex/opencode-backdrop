@@ -3,7 +3,7 @@ import { imageBytes } from "./image"
 import { initial, type UploadedWallpaper, type WallpaperPreferences } from "./preferences"
 
 export type WallpaperChoice = typeof Wallpaper.Type & { readonly image?: string }
-type SavedImages = Pick<WallpaperPreferences, "image" | "imageName" | "images">
+type SavedImages = Pick<WallpaperPreferences, "images">
 
 export function sameWallpaper(left: WallpaperChoice | undefined, right: WallpaperChoice | undefined) {
   return left?.id === right?.id && left?.version === right?.version && left?.image === right?.image
@@ -14,8 +14,7 @@ export function selectedWallpaper(settings: Pick<WallpaperPreferences, "preset">
 }
 
 export function uploadedWallpapers(settings: SavedImages): readonly UploadedWallpaper[] {
-  const images = settings.images ?? []
-  return settings.image ? [{ id: "custom", name: settings.imageName ?? "", image: settings.image }, ...images] : images
+  return settings.images
 }
 
 export function wallpaperCatalog(images: readonly (typeof Wallpaper.Type)[] = [], settings: SavedImages = initial, previous: readonly WallpaperChoice[] = []): WallpaperChoice[] {
@@ -35,12 +34,9 @@ export function canRemoveWallpaper(choice: Pick<WallpaperChoice, "id">) {
   return choice.id === "custom" || choice.id.startsWith("upload:")
 }
 
-export function removeWallpaper(draft: { enabled: boolean; preset: string; image: string; imageName?: string; images?: readonly UploadedWallpaper[] }, choice: WallpaperChoice, images: readonly WallpaperChoice[]) {
+export function removeWallpaper(draft: { enabled: boolean; preset: string; images: readonly UploadedWallpaper[] }, choice: WallpaperChoice, images: readonly WallpaperChoice[]) {
   if (!canRemoveWallpaper(choice)) return
-  if (choice.id === "custom") {
-    draft.image = ""
-    delete draft.imageName
-  } else draft.images = draft.images?.filter((image) => image.id !== choice.id)
+  draft.images = draft.images.filter((image) => image.id !== choice.id)
   if (draft.preset !== choice.id) return
   const next = images[images.findIndex((image) => image.id === choice.id) + 1] ?? images.find((image) => image.id !== choice.id)
   draft.preset = next?.id ?? initial.preset
@@ -77,7 +73,7 @@ export function checkWallpaperDuplicate(upload: { name: string; image?: string }
 function wallpaperFilename(id: string) {
   if (!id.startsWith("file:")) return ""
   const path = id.slice(5)
-  try { return decodeURIComponent(path) } catch { return path }
+  return decodeURIComponent(path)
 }
 
 function filenameKey(name: string) {

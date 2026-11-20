@@ -6,6 +6,7 @@ import { uploadImage } from "./image"
 import { appearanceControls, appearanceKeys, slideshowControls, wallpaperAppearance, type WallpaperTransition } from "./preferences"
 import type { ThumbnailCache } from "./thumbnail-cache"
 import { WallpaperThumbnail } from "./thumbnail"
+import { WallpaperGalleryToggle } from "./gallery-toggle"
 
 export function WallpaperSettings(props: {
   images: Accessor<readonly WallpaperChoice[]>
@@ -22,10 +23,8 @@ export function WallpaperSettings(props: {
   const [folderRequest, setFolderRequest] = createSignal<AbortController>()
   const [expanded, setExpanded] = createSignal(false)
   const [columns, setColumns] = createSignal(1)
-  const [branchOffset, setBranchOffset] = createSignal(0)
   const galleryId = createUniqueId()
   let gallery!: HTMLDivElement
-  let slideshowDescription!: HTMLSpanElement
   let fileInput!: HTMLInputElement
   const appearance = createMemo(() => wallpaperAppearance(settings.value))
   const limit = () => columns() * 2 - 1
@@ -34,26 +33,15 @@ export function WallpaperSettings(props: {
     const measure = () => {
       const tracks = getComputedStyle(gallery).gridTemplateColumns
       setColumns(tracks === "none" ? 1 : tracks.trim().split(/\s+/).length)
-      const text = slideshowDescription.firstChild
-      if (text instanceof Text && text.length) {
-        const range = document.createRange()
-        range.setStart(text, 0)
-        range.setEnd(text, 1)
-        const letter = range.getBoundingClientRect()
-        const description = slideshowDescription.getBoundingClientRect()
-        const center = letter.left + letter.width / 2
-        setBranchOffset(getComputedStyle(slideshowDescription).direction === "rtl" ? description.right - center : center - description.left)
-      }
     }
     const observer = new ResizeObserver(measure)
     observer.observe(gallery)
-    observer.observe(slideshowDescription)
     measure()
     onCleanup(() => observer.disconnect())
   })
   const cancelUpload = () => { request()?.abort(); setRequest(undefined) }
   onCleanup(() => { cancelUpload(); folderRequest()?.abort() })
-  createRenderEffect(on(() => [settings.value.enabled, settings.value.preset, settings.value.image], cancelUpload, { defer: true }))
+  createRenderEffect(on(() => [settings.value.enabled, settings.value.preset], cancelUpload, { defer: true }))
 
   function select(choice: string) {
     cancelUpload()
@@ -71,8 +59,8 @@ export function WallpaperSettings(props: {
       if (signal.aborted) return
       checkWallpaperDuplicate({ name: file.name, image: source }, settings.value, props.images())
       settings.update((draft) => {
-        const id = `upload:${Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("")}`
-        draft.images = [...(draft.images ?? []), { id, name: file.name, image: source }]
+        const id = `upload:${crypto.randomUUID()}`
+        draft.images.push({ id, name: file.name, image: source })
         changeWallpaper(draft, id)
       })
     } catch (error) {
@@ -191,17 +179,12 @@ export function WallpaperSettings(props: {
               </div>
               <Show when={expanded() || props.images().length > limit()}>
                 <div class="opencode-wallpaper-gallery-toggle">
-                  <button
-                    type="button"
-                    data-component="button-v2"
-                    data-variant="neutral"
-                    data-size="normal"
-                    aria-expanded={expanded()}
-                    aria-controls={galleryId}
-                    onClick={() => setExpanded((value) => !value)}
-                  >
-                    {ctx.t(expanded() ? "gallery.showLess" : "gallery.showMore")}
-                  </button>
+                  <WallpaperGalleryToggle
+                    expanded={expanded()}
+                    controls={galleryId}
+                    label={ctx.t(expanded() ? "gallery.showLess" : "gallery.showMore")}
+                    onToggle={() => setExpanded((value) => !value)}
+                  />
                 </div>
               </Show>
             </div>
@@ -220,12 +203,12 @@ export function WallpaperSettings(props: {
               }}
             />
           </ctx.ui.SettingsRow>
-          <div class="opencode-wallpaper-slideshow" role="group" aria-label={ctx.t("slideshow.title")} style={{ "--wallpaper-branch-center": `${branchOffset()}px` }}>
+          <div class="opencode-wallpaper-slideshow" role="group" aria-label={ctx.t("slideshow.title")}>
             <ctx.ui.SettingsRow
               id="wallpaper-slideshow"
               title={ctx.t("slideshow.title")}
               description={
-                <span ref={slideshowDescription} class="opencode-wallpaper-slideshow-description" data-expanded={settings.value.slideshow ? "" : undefined}>
+                <span>
                   {ctx.t("slideshow.description")}
                 </span>
               }
@@ -247,7 +230,7 @@ export function WallpaperSettings(props: {
                 >
                   <ctx.ui.Select<WallpaperTransition>
                     label={ctx.t("transition.title")}
-                    value={settings.value.transition ?? slideshowControls.transition}
+                    value={settings.value.transition}
                     options={[
                       { value: "none", label: ctx.t("transition.none") },
                       { value: "fade", label: ctx.t("transition.fade") },
@@ -266,14 +249,14 @@ export function WallpaperSettings(props: {
                       min={slideshowControls.min}
                       max={slideshowControls.max}
                       step="1"
-                      value={settings.value.duration ?? slideshowControls.duration}
+                      value={settings.value.duration}
                       aria-label={ctx.t("duration.title")}
                       onChange={(event) => {
                         const input = event.currentTarget
                         const value = input.valueAsNumber
                         if (Number.isInteger(value) && value >= slideshowControls.min && value <= slideshowControls.max) {
                           settings.update((draft) => { draft.duration = value })
-                        } else input.value = String(settings.value.duration ?? slideshowControls.duration)
+                        } else input.value = String(settings.value.duration)
                       }}
                     />
                   </label>

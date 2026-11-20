@@ -1,5 +1,29 @@
 import { wallpaperAppearance, type WallpaperPreferences } from "./preferences"
 
+export function createWallpaperStyles(settings: string, canvas: string) {
+  const settingsStyle = document.createElement("style")
+  const canvasStyle = document.createElement("style")
+  const imageStyle = document.createElement("style")
+  settingsStyle.dataset.wallpaperStyle = "settings"
+  canvasStyle.dataset.wallpaperStyle = "canvas"
+  imageStyle.dataset.wallpaperStyle = "image"
+  settingsStyle.textContent = settings
+  canvasStyle.textContent = canvas
+  canvasStyle.disabled = true
+  document.head.append(settingsStyle, canvasStyle, imageStyle)
+  return {
+    update(variables: string) {
+      imageStyle.textContent = variables
+      canvasStyle.disabled = !variables
+    },
+    dispose() {
+      settingsStyle.remove()
+      canvasStyle.remove()
+      imageStyle.remove()
+    },
+  }
+}
+
 export const wallpaperPanels = '[data-slot="home-panel"], [data-slot="session-chat-panel"] > .bg-v2-background-bg-base, [data-component="new-session"]'
 
 export const wallpaperHeaders = `
@@ -57,7 +81,7 @@ export const wallpaperSurfaces = `
 
   :is(${wallpaperPanels}) [data-wallpaper-backed] {
     isolation: isolate;
-    background: transparent;
+    background: var(--v2-background-bg-base);
   }
 
   [data-slot="session-chat-panel"] [data-session-title] > .bg-v2-background-bg-base,
@@ -65,8 +89,6 @@ export const wallpaperSurfaces = `
     position: relative;
   }
 
-  /* Old page-colored fades would leave bands over the image. The aligned header
-     copies conceal scrolling content without blurring or repainting a solid strip. */
   [data-slot="session-chat-panel"] .session-header-fade {
     background: none;
   }
@@ -108,9 +130,6 @@ export const wallpaperSurfaces = `
     color: var(--v2-text-text-base);
   }
 
-  /* Counter-shadow paths fill the lower interiors of the letters. Keep those
-     transparent instead of turning them into gray rectangles. Only the inner
-     paint group changes; outer groups still control the lodger's animations. */
   [data-component="new-session"] [data-component="new-session-wordmark"] {
     --icon-base: var(--v2-text-text-base);
     --icon-strong-base: var(--v2-text-text-base);
@@ -122,8 +141,6 @@ export const wallpaperSurfaces = `
     filter: drop-shadow(0 1px 2px var(--v2-background-bg-base));
   }
 
-  /* The game's back pins and paddle use z-index -10 and -5. Keep the wallpaper
-     below them, and outline only the moving shapes rather than shading the arena. */
   [data-component="new-session"] :is([data-slot="new-session-pins"], [data-slot="new-session-pins-popped"]) {
     filter: drop-shadow(0 1px 2px var(--v2-background-bg-base));
   }
@@ -137,8 +154,6 @@ export const wallpaperSurfaces = `
   }
 `
 
-// Static rules are registered separately from the image variables so dragging a
-// slider does not reparse the complete stylesheet on every input event.
 export const wallpaperCanvasStyle = wallpaperSurfaces + wallpaperLayers(`${wallpaperPanels}, :is(${wallpaperPanels}) [data-wallpaper-backed]`)
 
 export function wallpaperBackground(settings: WallpaperPreferences, image: string) {

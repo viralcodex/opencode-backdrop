@@ -1,3 +1,4 @@
+import { Effect, Semaphore } from "effect"
 import type { ThumbnailBlob } from "./image"
 import { sameWallpaper, type WallpaperChoice } from "./model"
 
@@ -26,9 +27,8 @@ export function createThumbnailCache(
   const entries = new Map<string, Entry>()
   const retired = new Set<Entry>()
   const idle = new Map<Entry, number>()
-  const queue = new Set<Entry>()
+  const permits = Semaphore.makeUnsafe(concurrency)
   let idleBytes = 0
-  let running = 0
   let disposed = false
 
   function activate(entry: Entry) {
@@ -48,7 +48,6 @@ export function createThumbnailCache(
   function discard(entry: Entry) {
     if (entry.retired) return
     activate(entry)
-    queue.delete(entry)
     if (entries.get(entry.choice.id) === entry) entries.delete(entry.choice.id)
     entry.retired = true
     entry.controller.abort()
@@ -57,8 +56,6 @@ export function createThumbnailCache(
     else revoke(entry)
   }
 
-  // Track idle entries directly instead of scanning and allocating arrays on each
-  // tile release. Active tiles are pinned; only unused thumbnails can be evicted.
   function park(entry: Entry) {
     if (entry.users || entry.retired) return
     activate(entry)
@@ -71,28 +68,20 @@ export function createThumbnailCache(
     }
   }
 
-  function drain() {
-    while (!disposed && running < concurrency && queue.size) {
-      const entry = queue.values().next().value!
-      queue.delete(entry)
-      running++
-      void Promise.resolve().then(() => {
-        entry.controller.signal.throwIfAborted()
-        return load(entry.choice, entry.controller.signal)
-      }).then((thumbnail) => {
-        entry.controller.signal.throwIfAborted()
-        entry.value = { url: URL.createObjectURL(thumbnail.blob), width: thumbnail.width, height: thumbnail.height }
-        entry.bytes = thumbnail.blob.size
-        entry.resolve(entry.value)
-        park(entry)
-      }).catch((error: unknown) => {
-        entry.reject(error)
-        discard(entry)
-      }).finally(() => {
-        running--
-        drain()
-      })
-    }
+  function loadEntry(entry: Entry) {
+    void Effect.runPromise(permits.withPermit(Effect.tryPromise({
+      try: (signal) => load(entry.choice, signal),
+      catch: (error) => error,
+    })), { signal: entry.controller.signal }).then((thumbnail) => {
+      entry.controller.signal.throwIfAborted()
+      entry.value = { url: URL.createObjectURL(thumbnail.blob), width: thumbnail.width, height: thumbnail.height }
+      entry.bytes = thumbnail.blob.size
+      entry.resolve(entry.value)
+      park(entry)
+    }).catch((error: unknown) => {
+      entry.reject(error)
+      discard(entry)
+    })
   }
 
   function acquire(choice: WallpaperChoice): ThumbnailLease {
@@ -103,17 +92,14 @@ export function createThumbnailCache(
       entry = undefined
     }
     if (!entry) {
-      let resolve!: Entry["resolve"]
-      let reject!: Entry["reject"]
-      const ready = new Promise<Thumbnail>((accept, fail) => { resolve = accept; reject = fail })
+      const { promise: ready, resolve, reject } = Promise.withResolvers<Thumbnail>()
       entry = { choice: { ...choice }, controller: new AbortController(), ready, resolve, reject, users: 0, bytes: 0, retired: false }
-      queue.add(entry)
+      loadEntry(entry)
     }
     const current = entry
     activate(current)
     current.users++
     entries.set(choice.id, current)
-    drain()
     let released = false
     return {
       value: current.value,
@@ -140,7 +126,6 @@ export function createThumbnailCache(
     retired.clear()
     idle.clear()
     idleBytes = 0
-    queue.clear()
   }
   signal?.addEventListener("abort", dispose, { once: true })
   if (signal?.aborted) dispose()

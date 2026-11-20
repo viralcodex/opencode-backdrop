@@ -16,6 +16,26 @@ export const wallpaperTransitionStyle = `
   }
 `
 
+export function createWallpaperVisibilityAnimation() {
+  let animations: Animation[] = []
+  const clear = () => { animations.forEach((animation) => animation.cancel()); animations = [] }
+  return {
+    fade(show: boolean, duration: number) {
+      const reversing = animations.length > 0
+      const layers = [...document.querySelectorAll<HTMLElement>(`${wallpaperPanels}, ${wallpaperHeaders}`)].flatMap((element) =>
+        ["::before", "::after"].map((pseudoElement) => ({ element, pseudoElement,
+          opacity: reversing ? Number(getComputedStyle(element, pseudoElement).opacity) : show ? 0 : 1 })),
+      )
+      clear()
+      animations = layers.map(({ element, pseudoElement, opacity }) => element.animate(
+        [{ opacity }, { opacity: show ? 1 : 0 }],
+        { duration, easing: "ease-in-out", fill: "forwards", pseudoElement },
+      ))
+    },
+    clear,
+  }
+}
+
 // Keep tint and the interface still. Only the incoming image pseudo-element fades.
 export function fadeWallpaper(previous: WallpaperFrame, fit: "cover" | "contain", duration: number) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return () => {}

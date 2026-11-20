@@ -1,6 +1,6 @@
 import { batch, createEffect, createMemo, createSignal, on, onCleanup, type Accessor } from "solid-js"
 import { selectedWallpaper, type WallpaperChoice } from "./model"
-import { slideshowControls, type WallpaperPreferences } from "./preferences"
+import type { WallpaperPreferences } from "./preferences"
 
 export function nextWallpaper(current: string, images: readonly WallpaperChoice[]) {
   if (!images.length) return undefined
@@ -26,7 +26,7 @@ export function createWallpaperSlideshow(settings: Accessor<WallpaperPreferences
     const preferences = settings()
     const current = selected()
     if (!preferences.enabled || !preferences.slideshow || !current || images().length < 2 || !ready()) return
-    const timer = setTimeout(() => setAutomatic(nextWallpaper(current.id, images())?.id), (preferences.duration ?? slideshowControls.duration) * 1000)
+    const timer = setTimeout(() => setAutomatic(nextWallpaper(current.id, images())?.id), preferences.duration * 1000)
     onCleanup(() => clearTimeout(timer))
   })
   return { selected, reset }

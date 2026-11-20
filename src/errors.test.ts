@@ -2,13 +2,10 @@ import { expect, test } from "bun:test"
 import type { ToastOptions } from "@opencode/plugin/gui"
 import { createWallpaperErrorReporter } from "./errors"
 
-test("dismissed background errors do not return on polling, retries or Settings reopenings", () => {
+test("unchanged background errors do not repeat, but recovered errors can notify again", () => {
   const shown: ToastOptions[] = []
   const report = createWallpaperErrorReporter({ show(options) { shown.push(options); return { dismiss() {} } } })
   report("folder", "Wallpaper folder", ["example.jpg: too large", "other.png: empty"])
-  // No toast lifecycle callback is needed. Once reported, the scan remains seen
-  // even after its toast closes or its error temporarily clears during a retry.
-  report("folder", "Wallpaper folder", [])
   report("folder", "Wallpaper folder", ["other.png: empty", "example.jpg: too large"])
   expect(shown).toEqual([{
     variant: "error", icon: "outline-photo", title: "Wallpaper folder",
@@ -16,6 +13,18 @@ test("dismissed background errors do not return on polling, retries or Settings 
   }])
   report("folder", "Wallpaper folder", ["example.jpg: too large", "new.webp: unreadable"])
   expect(shown[1]?.description).toBe("new.webp: unreadable")
+  expect(shown).toHaveLength(2)
+  report("folder", "Wallpaper folder", [])
+  report("folder", "Wallpaper folder", ["example.jpg: too large"])
+  expect(shown[2]?.description).toBe("example.jpg: too large")
+})
+
+test("drops deduplication state for removed sources", () => {
+  const shown: ToastOptions[] = []
+  const report = createWallpaperErrorReporter({ show(options) { shown.push(options); return { dismiss() {} } } })
+  report("old", "Wallpapers", ["Unreadable image"])
+  report.retain(["current"])
+  report("old", "Wallpapers", ["Unreadable image"])
   expect(shown).toHaveLength(2)
 })
 

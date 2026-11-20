@@ -8,7 +8,6 @@ export const Wallpaper = Schema.Struct({ id: Schema.String, title: Schema.String
 export const ImageRequest = Schema.Struct({ id: Schema.String, version: Schema.String })
 
 export const Catalog = Ipc.define({
-  // Desktop caches clients by ID across reloads. A changed protocol needs a new ID.
   id: "wallpaper.catalog.v5",
   state: Schema.Struct({
     folder: Schema.String,
