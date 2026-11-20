@@ -1,4 +1,5 @@
-import { afterEach, expect, jest, test } from "bun:test"
+import { afterEach, expect, jest, spyOn, test } from "bun:test"
+import * as fs from "node:fs"
 import { mkdir, mkdtemp, realpath, rm, symlink, truncate } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -25,6 +26,7 @@ test("discovers nested additions without reading or publishing full image conten
   await catalog.refresh()
   expect(catalog.state().ready).toBe(true)
   expect(catalog.state().images).toEqual([])
+  expect(catalog.state().error).toContain("ENOENT")
   await mkdir(path.join(folder, "nested"), { recursive: true })
   await mkdir(path.join(directory, "wallpapers"))
   await Bun.write(path.join(folder, "nested", "ocean.SVG"), svg)
@@ -107,8 +109,7 @@ test("keeps files with the same stem and different extensions distinct", async (
   expect(images.map((image) => image.id).sort()).toEqual(["png", "svg"].map((extension) => `file:${encodeURIComponent(path.join(directory, `example.${extension}`))}`))
 })
 
-test("refreshes from the timer without a manual refresh", async () => {
-  jest.useFakeTimers()
+test("refreshes from filesystem events without polling or a manual refresh", async () => {
   const directory = await fixture()
   const updated = Promise.withResolvers<void>()
   const catalog = createCatalog(directory, () => {
@@ -117,18 +118,108 @@ test("refreshes from the timer without a manual refresh", async () => {
   catalogs.push(catalog)
   await catalog.refresh()
   await Bun.write(path.join(directory, "new.svg"), svg)
-  jest.advanceTimersByTime(2000)
   await updated.promise
   expect(catalog.state().images.map((image) => image.title)).toEqual(["new"])
 })
 
-test("removes its timer on disposal and refuses further scans", async () => {
-  jest.useFakeTimers()
-  const timers = jest.getTimerCount()
+test("watches nested files through a folder alias", async () => {
+  const directory = await fixture()
+  const folder = path.join(directory, "images")
+  const alias = path.join(directory, "alias")
+  await mkdir(path.join(folder, "nested"), { recursive: true })
+  await symlink(folder, alias)
+  const updated = Promise.withResolvers<void>()
+  const catalog = createCatalog(alias, () => {
+    if (catalog.state().images.length) updated.resolve()
+  })
+  catalogs.push(catalog)
+  await catalog.refresh()
+  await Bun.write(path.join(folder, "nested", "new.svg"), svg)
+  await updated.promise
+  expect(catalog.state().images[0]?.title).toBe(path.join("nested", "new"))
+})
+
+test("reattaches watching after the folder is deleted and recreated", async () => {
+  const directory = await fixture()
+  const folder = path.join(directory, "images")
+  await mkdir(folder)
+  let updated = Promise.withResolvers<void>()
+  const catalog = createCatalog(folder, () => { updated.resolve() })
+  catalogs.push(catalog)
+  await catalog.refresh()
+  updated = Promise.withResolvers<void>()
+  await rm(folder, { recursive: true })
+  await updated.promise
+  expect(catalog.state().error).toContain("ENOENT")
+  updated = Promise.withResolvers<void>()
+  await mkdir(folder)
+  await Bun.write(path.join(folder, "restored.svg"), svg)
+  while (!catalog.state().images.length) {
+    await updated.promise
+    updated = Promise.withResolvers<void>()
+  }
+  expect(catalog.state().error).toBe("")
+  updated = Promise.withResolvers<void>()
+  await Bun.write(path.join(folder, "another.svg"), svg)
+  while (catalog.state().images.length < 2) {
+    await updated.promise
+    updated = Promise.withResolvers<void>()
+  }
+  expect(catalog.state().images.map((image) => image.title)).toEqual(["another", "restored"])
+})
+
+test("a refresh requested during an active scan includes subsequent filesystem changes", async () => {
+  const directory = await fixture()
+  const catalog = tracked(directory)
+  const first = catalog.refresh()
+  await Bun.write(path.join(directory, "new.svg"), svg)
+  await Promise.all([first, catalog.refresh()])
+  expect(catalog.state().images.map((image) => image.title)).toEqual(["new"])
+})
+
+test("missing folders report failures rather than successful empty scans", async () => {
+  const directory = await fixture()
+  const catalog = tracked(path.join(directory, "missing"))
+  expect(await catalog.refresh()).toBe(false)
+  expect(catalog.state().ready).toBe(true)
+  expect(catalog.state().error).toContain("ENOENT")
+})
+
+test("reports watcher errors without an automatic retry and recovers on explicit refresh", async () => {
+  const directory = await fixture()
+  const watch = spyOn(fs, "watch")
+  try {
+    const updated = Promise.withResolvers<void>()
+    const catalog = createCatalog(directory, () => {
+      if (catalog.state().images.length) updated.resolve()
+    })
+    catalogs.push(catalog)
+    await catalog.refresh()
+    const calls = watch.mock.calls.length
+    const result = watch.mock.results.at(-1)
+    if (!result || result.type !== "return") throw new Error("No filesystem watcher was created")
+    const closed = Promise.withResolvers<void>()
+    result.value.once("close", closed.resolve)
+    result.value.emit("error", new Error("Watcher unavailable"))
+    await closed.promise
+    expect(catalog.state().error).toContain("Watcher unavailable")
+    expect(watch.mock.calls).toHaveLength(calls)
+    expect(await catalog.refresh()).toBe(true)
+    expect(catalog.state().error).toBe("")
+    const replacement = watch.mock.results.at(-1)
+    if (!replacement || replacement.type !== "return") throw new Error("No replacement watcher was created")
+    expect(replacement.value).not.toBe(result.value)
+    await Bun.write(path.join(directory, "new.svg"), svg)
+    await updated.promise
+    expect(catalog.state().images[0]?.title).toBe("new")
+  } finally {
+    watch.mockRestore()
+  }
+})
+
+test("refuses further scans after disposal", async () => {
   const catalog = tracked("/unused-wallpaper-folder")
   catalog.dispose()
-  expect(jest.getTimerCount()).toBe(timers)
-  jest.advanceTimersByTime(2000)
   expect(await catalog.refresh()).toBe(false)
 })
 
@@ -172,13 +263,16 @@ test("rejects reads after cancellation or disposal", async () => {
   await expect(catalog.read(image)).rejects.toThrow()
 })
 
-test("no folder means an empty catalog without filesystem polling or errors", async () => {
-  jest.useFakeTimers()
-  const timers = jest.getTimerCount()
-  const catalog = tracked(wallpaperFolder(undefined))
-  expect(await catalog.refresh()).toBe(true)
-  expect(catalog.state()).toEqual({ folder: "", ready: true, images: [], error: "" })
-  expect(jest.getTimerCount()).toBe(timers)
+test("no folder means an empty catalog without watchers or errors", async () => {
+  const watch = spyOn(fs, "watch")
+  try {
+    const catalog = tracked(wallpaperFolder(undefined))
+    expect(await catalog.refresh()).toBe(true)
+    expect(catalog.state()).toEqual({ folder: "", ready: true, images: [], error: "" })
+    expect(watch).not.toHaveBeenCalled()
+  } finally {
+    watch.mockRestore()
+  }
 })
 
 function tracked(folder: string) {

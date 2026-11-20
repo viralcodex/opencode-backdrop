@@ -22,19 +22,19 @@ describe("local wallpaper images", () => {
       "data:image/png;base64,====",
       "data:image/png;base64,",
     ]) {
-      expect(() => Schema.decodeUnknownSync(Preferences)({ ...initial, image })).toThrow()
+      expect(() => Schema.encodeUnknownSync(Preferences)({ ...initial, images: [{ id: "upload:test", name: "test.png", image }] })).toThrow()
       expect(() => wallpaperBlob(image)).toThrow("image.decodeError")
     }
   })
 
   test("enforces both encoded and decoded preference size limits", () => {
     const image = `data:image/jpeg;base64,${Buffer.alloc(8 * 1024 * 1024).toString("base64")}`
-    expect(() => Schema.decodeUnknownSync(Preferences)({ ...initial, preset: "custom", image })).not.toThrow()
+    expect(() => Schema.encodeUnknownSync(Preferences)({ ...initial, preset: "upload:test", images: [{ id: "upload:test", name: "test.jpg", image }] })).not.toThrow()
     expect(() =>
-      Schema.decodeUnknownSync(Preferences)({ ...initial, preset: "custom", image: image.slice(0, -4) + "AAAAAAAA" }),
+      Schema.encodeUnknownSync(Preferences)({ ...initial, images: [{ id: "upload:test", name: "test.jpg", image: image.slice(0, -4) + "AAAAAAAA" }] }),
     ).toThrow()
     const oversizedPng = `data:image/png;base64,${Buffer.alloc(8 * 1024 * 1024 + 1).toString("base64")}`
-    expect(() => Schema.decodeUnknownSync(Preferences)({ ...initial, image: oversizedPng })).toThrow()
+    expect(() => Schema.encodeUnknownSync(Preferences)({ ...initial, images: [{ id: "upload:test", name: "test.png", image: oversizedPng }] })).toThrow()
   })
 
   test("renders a large folder image through a short blob URL without changing its bytes", async () => {
@@ -56,7 +56,7 @@ describe("local wallpaper images", () => {
   test("decodes local SVG data without accepting it as an uploaded preference", async () => {
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'
     for (const image of [`data:image/svg+xml,${encodeURIComponent(svg)}`, `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`]) {
-      expect(() => Schema.decodeUnknownSync(Preferences)({ ...initial, image })).toThrow()
+      expect(() => Schema.encodeUnknownSync(Preferences)({ ...initial, images: [{ id: "upload:test", name: "test.svg", image }] })).toThrow()
       expect(await wallpaperBlob(image).text()).toBe(svg)
     }
     expect(() => wallpaperBlob("data:image/svg+xml,%")).toThrow("image.decodeError")

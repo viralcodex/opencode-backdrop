@@ -1,86 +1,61 @@
-import { Command, Plugin, SettingsPage, Store } from "@opencode/plugin/gui"
+import { Command, Plugin, SettingsPage, Store, createKeyed } from "@opencode/plugin/gui"
 import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { Schema } from "effect"
 import { wallpaperCommand } from "./command"
 import { Catalog } from "./contract"
 import { changeWallpaper, setWallpaperEnabled, wallpaperCatalog, wallpaperTitle, type WallpaperChoice } from "./model"
-import { appearanceKeys, Preferences, initial, slideshowControls, wallpaperFadeDuration } from "./preferences"
-import { createWallpaperImage, type WallpaperReader } from "./render"
+import { appearanceKeys, StoredPreferences, initial, wallpaperFadeDuration } from "./preferences"
+import { createWallpaperImage, createWallpaperVisibility, type WallpaperReader } from "./render"
 import { imageError, thumbnailBlob } from "./image"
 import { createWallpaperErrorReporter } from "./errors"
 import { createThumbnailCache } from "./thumbnail-cache"
 import { alignWallpaperHeaders } from "./backdrop"
-import { wallpaperCanvasStyle, wallpaperVariableStyle } from "./style"
+import { createWallpaperStyles, wallpaperCanvasStyle, wallpaperVariableStyle } from "./style"
 import { WallpaperSettings } from "./settings"
 import { WallpaperPicker } from "./picker"
 import { createWallpaperSlideshow } from "./slideshow"
-import { fadeWallpaper, wallpaperTransitionStyle } from "./transition"
+import { createWallpaperVisibilityAnimation, fadeWallpaper, wallpaperTransitionStyle } from "./transition"
 import en from "./i18n/en"
 import css from "./settings.css?inline"
 
 export default Plugin.define({
-  stores: { preferences: Store.global(Preferences, initial) },
+  stores: { preferences: Store.global(StoredPreferences, initial) },
   i18n: { en },
   async main(ctx) {
     const { createCatalog, wallpaperFolder, wallpaperFolderLabel } = await import("./catalog")
-    let catalog: ReturnType<typeof createCatalog> | undefined
-    let initializing: Promise<boolean> | undefined
-    let fallback: typeof Catalog.spec.state.Type = { folder: "", ready: false, images: [], error: "" }
-    const folder = () => ctx.storage.store("folder", { schema: Schema.String, initial: "" })
-    ctx.onCleanup(() => catalog?.dispose())
+    ctx.signal.throwIfAborted()
+    const folder = ctx.storage.store("folder", { schema: Schema.String, initial: "" })
+    let catalog = createCatalog(wallpaperFolder(folder.value || (ctx.options.folder ?? ctx.options.folders)), changed)
+    ctx.onCleanup(() => catalog.dispose())
     let lastError = ""
     const state = () => {
-      const value = catalog?.state() ?? fallback
+      const value = catalog.state()
       return { ...value, folderLabel: wallpaperFolderLabel(value.folder) }
     }
-    const changed = () => {
+    function changed() {
       const error = state().error
       if (error && error !== lastError) ctx.log.write("error", "wallpaper folder scan failed", { error })
       lastError = error
       provider.changed()
     }
-    function refresh(): Promise<boolean> {
-      if (ctx.signal.aborted) return Promise.resolve(false)
-      if (catalog) return catalog.refresh()
-      if (initializing) return initializing
-      initializing = (async () => {
-        try {
-          const configured = ctx.options.folder ?? ctx.options.folders
-          if (ctx.signal.aborted) return false
-          catalog = createCatalog(wallpaperFolder(folder().value || configured), changed)
-          changed()
-          return await catalog.refresh()
-        } catch (error) {
-          if (!ctx.signal.aborted) {
-            fallback = { ...fallback, ready: true, error: String(error) }
-            changed()
-          }
-          return false
-        }
-      })().finally(() => { initializing = undefined })
-      return initializing
-    }
     const provider = ctx.provide(Catalog, {
       state,
-      refresh,
+      refresh: () => catalog.refresh(),
       async setFolder(value, caller) {
-        if (initializing) await initializing
         caller.signal.throwIfAborted()
         ctx.signal.throwIfAborted()
         const selected = wallpaperFolder(value)
-        folder().set(selected)
-        catalog?.dispose()
+        folder.set(selected)
+        catalog.dispose()
         catalog = createCatalog(selected, changed)
         changed()
         return catalog.refresh()
       },
       async read(request, caller) {
-        if (!catalog) await refresh()
-        if (!catalog) throw new Error(state().error || "Wallpaper folders are unavailable.")
-        return catalog.read(request, caller.signal)
+        return catalog.read(request, AbortSignal.any([caller.signal, ctx.signal]))
       },
     })
-    await refresh()
+    await catalog.refresh()
   },
   setup(ctx) {
     const catalog = ctx.desktop ? ctx.main(Catalog) : undefined
@@ -91,7 +66,7 @@ export default Plugin.define({
     )
     const settings = ctx.stores.preferences
     const slideshow = createWallpaperSlideshow(() => settings.value, images, () =>
-      !image.loading && !image.previous && (!!image.url || !!image.error),
+      !image.loading && !image.previous && !visibility.fade() && (!!image.url || !!image.error),
     )
     const selected = slideshow.selected
     const select = (choice: string) => batch(() => {
@@ -111,17 +86,21 @@ export default Plugin.define({
       if (!catalog) throw new Error("image.readError")
       return catalog.read({ id: choice.id, version: choice.version }, { signal: AbortSignal.any([signal, ctx.signal]) })
     }
-    const image = createWallpaperImage(selected, read, () =>
-      settings.value.slideshow && (settings.value.transition ?? slideshowControls.transition) === "fade" && !reducedMotion()
+    const visibility = createWallpaperVisibility(() => settings.value.enabled, () => !!image.url, reducedMotion)
+    const painted = createMemo(() => settings.value.enabled ? selected() : visibility.enabled() ? image.choice : undefined)
+    const image = createWallpaperImage(painted, read, () =>
+      settings.value.slideshow && settings.value.transition === "fade" && !reducedMotion()
         ? wallpaperFadeDuration : 0,
     )
     const reportImage = (choice: WallpaperChoice, error: string) => report(
       `image:${choice.id}:${choice.version}`, ctx.t("title"),
-      [`${wallpaperTitle(choice, ctx.t)}: ${imageError(error, ctx.t)}`],
+      error ? [`${wallpaperTitle(choice, ctx.t)}: ${imageError(error, ctx.t)}`] : [],
     )
     const thumbnails = createThumbnailCache(async (choice, signal) => {
       try {
-        return await thumbnailBlob(choice.image ?? await read(choice, signal), signal)
+        const thumbnail = await thumbnailBlob(choice.image ?? await read(choice, signal), signal)
+        reportImage(choice, "")
+        return thumbnail
       } catch (error) {
         if (!signal.aborted && !ctx.signal.aborted) reportImage(choice, error instanceof Error ? error.message : String(error))
         throw error
@@ -132,39 +111,37 @@ export default Plugin.define({
     createEffect(() => {
       if (ctx.signal.aborted) return
       const state = catalog?.state()
-      if (state?.error) report(`folder:${state.folder}`, ctx.t("folders.title"),
-        state.error.split("\n").map((error) => error.replace(/image\.[A-Za-z]+$/, (key) => ctx.t(key))))
+      if (state) report(`folder:${state.folder}`, ctx.t("folders.title"),
+        state.error ? state.error.split("\n").map((error) => error.replace(/image\.[A-Za-z]+$/, (key) => ctx.t(key))) : [])
       const choice = selected()
-      if (choice && image.error) reportImage(choice, image.error)
+      if (choice && !image.loading) reportImage(choice, image.error)
       const preferences = ctx.stores.preferences.value
-      if (preferences.enabled && preferences.preset.startsWith("file:") && state?.ready && !state.error && !choice) {
-        report(`missing:${preferences.preset}`, ctx.t("title"), [ctx.t("folders.missing")])
-      }
+      const missing = preferences.enabled && preferences.preset.startsWith("file:") && state?.ready && !state.error && !choice
+      report(`missing:${preferences.preset}`, ctx.t("title"), missing ? [ctx.t("folders.missing")] : [])
+      report.retain([
+        ...images().map((image) => `image:${image.id}:${image.version}`),
+        `folder:${state?.folder ?? ""}`, `missing:${preferences.preset}`, "refresh",
+      ])
     })
-    const settingsStyle = document.createElement("style")
-    const canvasStyle = document.createElement("style")
-    const imageStyle = document.createElement("style")
-    settingsStyle.dataset.wallpaperStyle = "settings"
-    canvasStyle.dataset.wallpaperStyle = "canvas"
-    imageStyle.dataset.wallpaperStyle = "image"
-    settingsStyle.textContent = css
-    canvasStyle.textContent = wallpaperCanvasStyle + wallpaperTransitionStyle
-    canvasStyle.disabled = true
-    document.head.append(settingsStyle, canvasStyle, imageStyle)
-    onCleanup(() => { settingsStyle.remove(); canvasStyle.remove(); imageStyle.remove() })
-    createEffect(() => {
-      const variables = wallpaperVariableStyle(settings.value, image.url)
-      imageStyle.textContent = variables
-      canvasStyle.disabled = !variables
-    })
-    createEffect(() => {
-      if (!image.url || !image.width || !image.height) return
-      onCleanup(alignWallpaperHeaders({ image: { width: image.width, height: image.height }, fit: ctx.stores.preferences.value.fit }))
-    })
+    const styles = createWallpaperStyles(css, wallpaperCanvasStyle + wallpaperTransitionStyle)
+    onCleanup(styles.dispose)
+    const variables = createMemo(() => wallpaperVariableStyle({ ...settings.value, enabled: visibility.enabled() }, image.url))
+    createEffect(() => styles.update(variables()))
+    createKeyed(() => image.url ? { url: image.url, width: image.width, height: image.height, fit: settings.value.fit } : undefined,
+      (frame) => onCleanup(alignWallpaperHeaders({ image: frame, fit: frame.fit })),
+      { equals: (left, right) => left?.url === right?.url && left?.fit === right?.fit },
+    )
     createEffect(() => {
       const previous = image.previous
       if (!previous || reducedMotion() || !settings.value.enabled || !settings.value.slideshow || settings.value.transition === "none") return
       onCleanup(fadeWallpaper(previous, settings.value.fit, image.transition))
+    })
+    const visibilityAnimation = createWallpaperVisibilityAnimation()
+    onCleanup(visibilityAnimation.clear)
+    createEffect(() => {
+      const fade = visibility.fade()
+      if (fade) visibilityAnimation.fade(fade.show, fade.duration)
+      else visibilityAnimation.clear()
     })
     ctx.add(SettingsPage, {
       id: "wallpaper",
@@ -205,7 +182,9 @@ export default Plugin.define({
       wallpaperCommand(ctx, images, async () => {
         if (!catalog) return true
         try {
-          return await catalog.refresh({ signal: ctx.signal })
+          const refreshed = await catalog.refresh({ signal: ctx.signal })
+          if (refreshed) report("refresh", ctx.t("folders.title"), [])
+          return refreshed
         } catch (error) {
           if (!ctx.signal.aborted) report("refresh", ctx.t("folders.title"), [String(error)])
           return false

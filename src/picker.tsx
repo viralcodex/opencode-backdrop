@@ -44,16 +44,10 @@ export function WallpaperPicker(props: {
 
   return <ctx.ui.Dialog title={props.options.title} size="large" footer={
     <div class="opencode-wallpaper-picker-footer">
-      <button
-        type="button"
-        data-component="button-v2"
-        data-variant="neutral"
-        data-size="normal"
-        aria-label={ctx.t("enabled.title")}
-        aria-pressed={props.enabled()}
+      <ctx.ui.Button
         disabled={!props.enabled() && !props.options.options.length}
         onClick={() => props.onToggle(!props.enabled())}
-      >{ctx.t(props.enabled() ? "picker.on" : "picker.off")}</button>
+      >{ctx.t(props.enabled() ? "picker.disable" : "picker.enable")}</ctx.ui.Button>
       <ctx.ui.Button onClick={() => props.onSelect("settings")}>{ctx.t("picker.settings")}</ctx.ui.Button>
     </div>
   }>

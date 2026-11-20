@@ -106,7 +106,7 @@ test("limits concurrent thumbnail generation", async () => {
   } finally { cache.dispose() }
 })
 
-test("retries failures and cancels late work on plugin shutdown", async () => {
+test("allows a new request after failure and cancels late work on plugin shutdown", async () => {
   let loads = 0
   const cache = createThumbnailCache(async () => {
     if (++loads === 1) throw new Error("image.decodeError")
@@ -116,9 +116,9 @@ test("retries failures and cancels late work on plugin shutdown", async () => {
     const failed = cache.acquire(file)
     await expect(failed.ready).rejects.toThrow("image.decodeError")
     failed.release()
-    const retry = cache.acquire(file)
-    await retry.ready
-    retry.release()
+    const requested = cache.acquire(file)
+    await requested.ready
+    requested.release()
     expect(loads).toBe(2)
   } finally { cache.dispose() }
 

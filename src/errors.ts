@@ -1,17 +1,13 @@
 import type { Toasts } from "@opencode/plugin/gui"
 
 export function createWallpaperErrorReporter(toast: Pick<Toasts, "show">) {
-  // Keep this reporter in the window setup, not Settings. Dismissing a toast or
-  // reopening Settings must not replay errors from an unchanged background scan.
   const reported = new Map<string, Set<string>>()
-  return (source: string, title: string, errors: readonly string[]) => {
+  const report = (source: string, title: string, errors: readonly string[]) => {
     const seen = reported.get(source) ?? new Set<string>()
-    const fresh = errors.filter((error) => {
-      if (!error || seen.has(error)) return false
-      seen.add(error)
-      return true
-    })
-    reported.set(source, seen)
+    const current = new Set(errors.filter(Boolean))
+    const fresh = [...current].filter((error) => !seen.has(error))
+    if (current.size) reported.set(source, current)
+    else reported.delete(source)
     if (!fresh.length) return
     toast.show({
       variant: "error",
@@ -20,4 +16,10 @@ export function createWallpaperErrorReporter(toast: Pick<Toasts, "show">) {
       description: fresh.join("\n\n"),
     })
   }
+  return Object.assign(report, {
+    retain(sources: readonly string[]) {
+      const active = new Set(sources)
+      for (const source of reported.keys()) if (!active.has(source)) reported.delete(source)
+    },
+  })
 }
